@@ -171,6 +171,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="nav" id="main-nav">
       <button class="nav-btn active" onclick="showTab('groups')" id="tab-btn-groups" data-en="Groups" data-ar="المجموعات">Groups</button>
       <button class="nav-btn" onclick="showTab('knockout')" id="tab-btn-knockout" data-en="Knockout" data-ar="إقصائي">Knockout</button>
+      <button class="nav-btn" onclick="showTab('schedule')" id="tab-btn-schedule" data-en="Schedule" data-ar="الجدول">Schedule</button>
+      <button class="nav-btn" onclick="showTab('standings')" id="tab-btn-standings" data-en="Standings" data-ar="الترتيب العام">Standings</button>
       <button class="nav-btn" onclick="showTab('champion')" id="tab-btn-champion" data-en="Champion" data-ar="البطل">Champion</button>
       <button class="nav-btn" onclick="showTab('leaderboard')" id="tab-btn-leaderboard" data-en="Leaderboard" data-ar="الترتيب">Leaderboard</button>
       <button class="nav-btn" onclick="showTab('admin')" id="tab-btn-admin" style="display:none" data-en="Admin" data-ar="الإدارة">Admin</button>
@@ -190,6 +192,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <p class="section-sub" id="sub-knockout">Each prediction locks 5 minutes before kickoff. Scores are based on the full match final score including extra time.</p>
       <div id="knockout-container"></div>
       <div style="height:70px"></div>
+    </div>
+
+    <!-- SCHEDULE TAB -->
+    <div id="tab-schedule" class="tab-content">
+      <p class="section-title" id="title-schedule">Full match schedule</p>
+      <p class="section-sub" id="sub-schedule">All 104 matches in Riyadh time. Live status updates during match days.</p>
+      <div id="schedule-container"><p style="color:#939598;font-size:13px">Loading schedule…</p></div>
+    </div>
+
+    <!-- STANDINGS TAB -->
+    <div id="tab-standings" class="tab-content">
+      <p class="section-title" id="title-standings">Group standings</p>
+      <p class="section-sub" id="sub-standings">Live group tables. Updated automatically on match days.</p>
+      <div id="standings-container"><p style="color:#939598;font-size:13px">Standings will appear once the tournament begins.</p></div>
     </div>
 
     <!-- CHAMPION TAB -->
@@ -275,10 +291,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
 
       <div class="admin-block">
-        <h3>Score controls</h3>
-        <p style="font-size:12px;color:#939598;margin-bottom:10px">Scores auto-fetch every 15 minutes on match days (10:00–01:00 Riyadh time). Max 100 API requests/day.</p>
+        <h3>API data controls</h3>
+        <p style="font-size:12px;color:#939598;margin-bottom:10px">Live scores &amp; standings auto-fetch every 30 minutes on match days (10:00–01:00 Riyadh time), ~60 requests/day. Fixtures &amp; logos load once.</p>
+        <div id="season-status" style="margin-bottom:10px"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-          <button class="btn btn-sm" onclick="manualRefresh()" id="btn-refresh" style="border-color:#0047BB;color:#0047BB">↻ Fetch latest scores</button>
+          <button class="btn btn-sm" onclick="loadFixtures()" id="btn-load-fixtures" style="border-color:#0047BB;color:#0047BB">⬇ Load fixtures &amp; logos</button>
+          <button class="btn btn-sm" onclick="manualRefresh()" id="btn-refresh" style="border-color:#0047BB;color:#0047BB">↻ Fetch scores</button>
+          <button class="btn btn-sm" onclick="refreshStandings()" id="btn-refresh-standings" style="border-color:#0047BB;color:#0047BB">↻ Refresh standings</button>
           <button class="btn btn-sm" onclick="checkAPIUsage()" id="btn-api-usage" style="border-color:#939598;color:#939598">Check API usage</button>
         </div>
         <div id="api-usage-display"></div>
@@ -727,6 +746,8 @@ function applyLangToMain(){
   document.getElementById('title-champion').textContent = t('title_champ');
   document.getElementById('sub-champion').textContent = t('sub_champ');
   document.getElementById('title-lb').textContent = t('title_lb');
+  var ts=document.getElementById('title-schedule'); if(ts) ts.textContent = lang==='ar'?'جدول المباريات الكامل':'Full match schedule';
+  var tst=document.getElementById('title-standings'); if(tst) tst.textContent = lang==='ar'?'ترتيب المجموعات':'Group standings';
 }
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycby1wRftH0r-H-gvdqS1TTxoorqlvvNznyHIHEEW97Pzx0b1WzySWAgNjxXIJCpnyMfs1A/exec';
@@ -745,6 +766,11 @@ async function loadStateFromSheet() {
     const data = await res.json();
     if (data && data.players) {
       state = data;
+      // Backfill new fields for states saved before these features existed
+      if (!state.teamLogos) state.teamLogos = {};
+      if (!state.standings) state.standings = {};
+      if (!state.fixtures) state.fixtures = {};
+      if (!state.apiMeta) state.apiMeta = { lastStatic: null, lastLive: null, seasonOK: null };
     } else {
       setDefaultState();
     }
@@ -801,6 +827,11 @@ async function saveStateToSheet(opts) {
           merged.results = state.results;
           merged.pending = state.pending;
           merged.actual_champion = state.actual_champion;
+          // API-sourced data is admin-owned too
+          merged.teamLogos = state.teamLogos || merged.teamLogos || {};
+          merged.standings = state.standings || merged.standings || {};
+          merged.fixtures = state.fixtures || merged.fixtures || {};
+          merged.apiMeta = state.apiMeta || merged.apiMeta || {};
           state = merged;
         } else if (opts.mergeScope === 'register') {
           // A registering (not logged-in) user only appends to pending.
@@ -846,7 +877,11 @@ function setDefaultState() {
     results: {},
     champion_picks: {},
     actual_champion: null,
-    pending: []
+    pending: [],
+    teamLogos: {},
+    standings: {},
+    fixtures: {},
+    apiMeta: { lastStatic: null, lastLive: null, seasonOK: null }
   };
 }
 
@@ -880,6 +915,8 @@ function doLogin(){
   renderKnockout();
   renderChampion();
   renderLeaderboard();
+  renderSchedule();
+  renderStandings();
   if(currentUser.isAdmin) renderAdmin();
   startAutoFetch();
 }
@@ -995,11 +1032,13 @@ function showTab(tab){
   document.getElementById('tab-'+tab).classList.add('active');
   document.getElementById('tab-btn-'+tab).classList.add('active');
   const saveBar = document.getElementById('save-bar');
-  saveBar.style.display = (tab==='leaderboard'||tab==='admin') ? 'none' : 'block';
+  saveBar.style.display = (tab==='leaderboard'||tab==='admin'||tab==='schedule'||tab==='standings') ? 'none' : 'block';
   const saveTextMap = {groups:t('save_groups'), knockout:t('save_ko'), champion:t('save_champ')};
   if(saveTextMap[tab]) document.getElementById('btn-save-text').textContent = saveTextMap[tab];
   if(tab==='leaderboard') renderLeaderboard();
   if(tab==='admin') renderAdmin();
+  if(tab==='schedule') renderSchedule();
+  if(tab==='standings') renderStandings();
 }
 
 function renderGroups(){
@@ -1040,11 +1079,11 @@ function renderGroups(){
             ${!locked&&countdown?`<span class="countdown-label" data-countdown-key="${schedKey}" data-match-id="${mid}" style="font-size:11px;color:#939598;margin-left:auto">${countdown}</span>`:''}
           </div>
           <div class="match-row">
-            <span class="team-name${locked&&!result?' losing':''}">${teams[i]}</span>
+            <span class="team-name${locked&&!result?' losing':''}" style="display:flex;align-items:center;gap:5px">${logoImg(teams[i],18)} ${teams[i]}</span>
             <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="–" inputmode="numeric" ${locked?'disabled':''} oninput="updateWinIndicator('${mid}');togglePenaltyRow('${mid}')"/>
             <span class="vs">vs</span>
             <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="–" inputmode="numeric" ${locked?'disabled':''} oninput="updateWinIndicator('${mid}');togglePenaltyRow('${mid}')"/>
-            <span class="team-name right${locked&&!result?' losing':''}">${teams[j]}</span>
+            <span class="team-name right${locked&&!result?' losing':''}" style="display:flex;align-items:center;gap:5px;justify-content:flex-end">${teams[j]} ${logoImg(teams[j],18)}</span>
           </div>`;
         container.appendChild(card);
         if(saved&&!locked) updateWinIndicator(mid);
@@ -1124,6 +1163,110 @@ function renderChampion(){
   if (champSaveBtn) champSaveBtn.style.display = locked ? 'none' : 'block';
 }
 
+function riyadhTimeString(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  // Convert to Riyadh (UTC+3) for display
+  const r = new Date(d.getTime() + RIYADH_OFFSET * 3600 * 1000);
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const hh = String(r.getUTCHours()).padStart(2,'0');
+  const mm = String(r.getUTCMinutes()).padStart(2,'0');
+  return `${days[r.getUTCDay()]} ${r.getUTCDate()} ${months[r.getUTCMonth()]}, ${hh}:${mm}`;
+}
+
+function statusLabel(short) {
+  const map = {
+    'NS':'Not started','TBD':'TBD','1H':'LIVE 1st half','HT':'Half time','2H':'LIVE 2nd half',
+    'ET':'Extra time','BT':'Break','P':'Penalties','FT':'Full time','AET':'After ET','PEN':'After penalties',
+    'PST':'Postponed','SUSP':'Suspended','INT':'Interrupted','CANC':'Cancelled','ABD':'Abandoned'
+  };
+  return map[short] || short || '';
+}
+
+function logoImg(teamName, size) {
+  const url = (state.teamLogos && state.teamLogos[teamName]) || '';
+  const s = size || 20;
+  if (!url) return `<span style="display:inline-block;width:${s}px"></span>`;
+  return `<img src="${url}" alt="" style="width:${s}px;height:${s}px;object-fit:contain;vertical-align:middle" onerror="this.style.display='none'"/>`;
+}
+
+function renderSchedule() {
+  const c = document.getElementById('schedule-container');
+  if (!c) return;
+  const fixtures = state.fixtures ? Object.values(state.fixtures) : [];
+  if (!fixtures.length) {
+    c.innerHTML = `<div class="alert alert-info">The schedule hasn't been loaded yet. ${currentUser && currentUser.isAdmin ? 'Go to the Admin tab and tap “Load fixtures & logos”.' : 'Ask the admin to load it.'}</div>`;
+    return;
+  }
+  fixtures.sort((a,b) => new Date(a.date) - new Date(b.date));
+  // Group by calendar day (Riyadh)
+  let html = '';
+  let lastDay = '';
+  fixtures.forEach(fx => {
+    const dayLabel = riyadhTimeString(fx.date).split(',')[0];
+    if (dayLabel !== lastDay) {
+      html += `<div class="group-label" style="margin-top:1.25rem">${dayLabel}</div>`;
+      lastDay = dayLabel;
+    }
+    const live = ['1H','HT','2H','ET','BT','P'].includes(fx.status);
+    const done = ['FT','AET','PEN'].includes(fx.status);
+    const timeStr = riyadhTimeString(fx.date).split(', ')[1] || '';
+    const scoreStr = (fx.gh!==null && fx.gh!==undefined) ? `${fx.gh}–${fx.ga}` : 'vs';
+    html += `
+      <div class="match-card" style="${live?'border-color:#E35205;border-left:3px solid #E35205':''}">
+        <div class="match-meta">
+          ${fx.round || ''} ${fx.venue?'· '+fx.venue:''}${fx.city?', '+fx.city:''}
+          ${live?`<span class="badge" style="background:#E35205;color:#fff;margin-left:auto">${statusLabel(fx.status)}</span>`:(done?`<span class="badge badge-result" style="margin-left:auto">${statusLabel(fx.status)}</span>`:`<span style="margin-left:auto;color:#939598">${timeStr}</span>`)}
+        </div>
+        <div class="match-row">
+          <span class="team-name" style="display:flex;align-items:center;gap:6px">${logoImg(fx.home)} ${fx.home}</span>
+          <span style="font-weight:700;color:#041E42;min-width:48px;text-align:center">${scoreStr}</span>
+          <span class="team-name right" style="display:flex;align-items:center;gap:6px;justify-content:flex-end">${fx.away} ${logoImg(fx.away)}</span>
+        </div>
+      </div>`;
+  });
+  c.innerHTML = html;
+}
+
+function renderStandings() {
+  const c = document.getElementById('standings-container');
+  if (!c) return;
+  const standings = state.standings || {};
+  const groups = Object.keys(standings).sort();
+  if (!groups.length) {
+    c.innerHTML = `<div class="alert alert-info">No standings yet. These populate automatically once group matches begin.${currentUser && currentUser.isAdmin ? ' You can also tap “Refresh standings” in the Admin tab.' : ''}</div>`;
+    return;
+  }
+  let html = '';
+  groups.forEach(g => {
+    html += `<div class="group-label" style="margin-top:1.25rem">${g}</div>`;
+    html += `<div class="match-card" style="padding:8px 10px"><table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="color:#939598;text-align:left">
+        <th style="padding:4px 2px">#</th><th style="padding:4px 2px">Team</th>
+        <th style="padding:4px 2px;text-align:center">P</th><th style="padding:4px 2px;text-align:center">W</th>
+        <th style="padding:4px 2px;text-align:center">D</th><th style="padding:4px 2px;text-align:center">L</th>
+        <th style="padding:4px 2px;text-align:center">GD</th><th style="padding:4px 2px;text-align:center">Pts</th>
+      </tr></thead><tbody>`;
+    standings[g].forEach((r, idx) => {
+      const qualifying = idx < 2;
+      html += `<tr style="border-top:0.5px solid #E6E7E8;${qualifying?'background:#E8EEF8':''}">
+        <td style="padding:5px 2px;color:#939598">${r.rank}</td>
+        <td style="padding:5px 2px;font-weight:500;color:#041E42;display:flex;align-items:center;gap:5px">${logoImg(r.team,16)} ${r.team}</td>
+        <td style="padding:5px 2px;text-align:center">${r.played}</td>
+        <td style="padding:5px 2px;text-align:center">${r.win}</td>
+        <td style="padding:5px 2px;text-align:center">${r.draw}</td>
+        <td style="padding:5px 2px;text-align:center">${r.lose}</td>
+        <td style="padding:5px 2px;text-align:center">${r.gd>0?'+':''}${r.gd}</td>
+        <td style="padding:5px 2px;text-align:center;font-weight:700;color:#0047BB">${r.points}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  });
+  html += `<p style="font-size:11px;color:#939598;margin-top:10px">Highlighted rows = top 2 (qualify for knockouts).</p>`;
+  c.innerHTML = html;
+}
+
 function renderLeaderboard(){
   const container=document.getElementById('lb-container');
   const scores={};
@@ -1182,6 +1325,7 @@ function renderLeaderboard(){
 
 function renderAdmin(){
   if(!currentUser.isAdmin) return;
+  renderSeasonStatus();
 
   // Render pending registrations
   const pending = state.pending || [];
@@ -1595,6 +1739,91 @@ function findMatchId(apiHome, apiAway, fixtureDate) {
   return null; // knockout auto-matching handled separately (TBD teams)
 }
 
+async function fetchStaticData() {
+  // One-time fetch of all fixtures: team logos, kickoff times, venues, round labels.
+  // This is our test of whether the free plan covers the 2026 season.
+  if (!currentUser || !currentUser.isAdmin) return { error: 'Admin only' };
+  try {
+    const url = `https://v3.football.api-sports.io/fixtures?league=${WC_LEAGUE}&season=${WC_SEASON}`;
+    const res = await fetch(url, { headers: { 'x-apisports-key': APISPORTS_KEY } });
+    const data = await res.json();
+    if (data.errors && (Array.isArray(data.errors) ? data.errors.length : Object.keys(data.errors).length)) {
+      state.apiMeta = state.apiMeta || {};
+      state.apiMeta.seasonOK = false;
+      return { error: 'API error: ' + JSON.stringify(data.errors) };
+    }
+    if (!data.response || !data.response.length) {
+      state.apiMeta = state.apiMeta || {};
+      state.apiMeta.seasonOK = false;
+      return { error: 'No 2026 fixtures returned — free plan likely does not cover this season.', count: 0 };
+    }
+    state.teamLogos = state.teamLogos || {};
+    state.fixtures = state.fixtures || {};
+    let logoCount = 0, fixtureCount = 0;
+    data.response.forEach(fx => {
+      const home = fx.teams.home.name, away = fx.teams.away.name;
+      if (fx.teams.home.logo && home) { state.teamLogos[home] = fx.teams.home.logo; logoCount++; }
+      if (fx.teams.away.logo && away) { state.teamLogos[away] = fx.teams.away.logo; }
+      state.fixtures[fx.fixture.id] = {
+        id: fx.fixture.id,
+        date: fx.fixture.date,
+        status: fx.fixture.status.short,
+        venue: (fx.fixture.venue && fx.fixture.venue.name) || '',
+        city: (fx.fixture.venue && fx.fixture.venue.city) || '',
+        round: (fx.league && fx.league.round) || '',
+        home: home, away: away,
+        homeLogo: fx.teams.home.logo || '', awayLogo: fx.teams.away.logo || '',
+        gh: fx.goals.home, ga: fx.goals.away
+      };
+      fixtureCount++;
+    });
+    state.apiMeta = state.apiMeta || {};
+    state.apiMeta.seasonOK = true;
+    state.apiMeta.lastStatic = new Date().toISOString();
+    await saveStateToSheet({mergeScope:"admin"});
+    return { count: fixtureCount, logos: Object.keys(state.teamLogos).length };
+  } catch(e) {
+    return { error: e.message };
+  }
+}
+
+async function fetchStandings() {
+  if (!currentUser || !currentUser.isAdmin) return { error: 'Admin only' };
+  try {
+    const url = `https://v3.football.api-sports.io/standings?league=${WC_LEAGUE}&season=${WC_SEASON}`;
+    const res = await fetch(url, { headers: { 'x-apisports-key': APISPORTS_KEY } });
+    const data = await res.json();
+    if (!data.response || !data.response.length) return { updated: 0 };
+    const leagueObj = data.response[0].league;
+    if (!leagueObj || !leagueObj.standings) return { updated: 0 };
+    state.standings = state.standings || {};
+    // standings is an array of groups; each group is an array of team rows
+    leagueObj.standings.forEach(groupRows => {
+      if (!groupRows.length) return;
+      const groupName = groupRows[0].group || 'Group';
+      state.standings[groupName] = groupRows.map(r => ({
+        rank: r.rank,
+        team: r.team.name,
+        logo: r.team.logo,
+        played: r.all.played,
+        win: r.all.win,
+        draw: r.all.draw,
+        lose: r.all.lose,
+        gd: r.goalsDiff,
+        points: r.points
+      }));
+      // cache logos from standings too
+      groupRows.forEach(r => { if (r.team.logo) { state.teamLogos = state.teamLogos||{}; state.teamLogos[r.team.name] = r.team.logo; } });
+    });
+    state.apiMeta = state.apiMeta || {};
+    state.apiMeta.lastLive = new Date().toISOString();
+    await saveStateToSheet({mergeScope:"admin"});
+    return { updated: Object.keys(state.standings).length };
+  } catch(e) {
+    return { error: e.message };
+  }
+}
+
 function showAutoUpdateBadge(count) {
   const existing = document.getElementById('auto-update-badge');
   if (existing) existing.remove();
@@ -1607,16 +1836,27 @@ function showAutoUpdateBadge(count) {
 }
 
 let countdownInterval = null;
+async function runLiveCycle() {
+  // One cycle = scores + standings (2 API requests). Admin-only, match-hours-only guarding is inside each fn.
+  const s = await fetchLatestScores();
+  // Only spend the standings request if we're actually in match hours / admin
+  if (!s || (!s.skipped)) {
+    await fetchStandings();
+    if (document.querySelector('#tab-standings.active')) renderStandings();
+    if (document.querySelector('#tab-schedule.active')) renderSchedule();
+  }
+}
+
 function startAutoFetch() {
   // Clear any existing intervals first (prevents stacking on repeated logins)
   if (autoFetchInterval) clearInterval(autoFetchInterval);
   if (countdownInterval) clearInterval(countdownInterval);
-  // Fetch on load
-  fetchLatestScores();
-  // Then every 15 minutes
+  // Run a cycle on load
+  runLiveCycle();
+  // Then every 30 minutes during match hours (~60 requests/day ceiling)
   autoFetchInterval = setInterval(() => {
-    fetchLatestScores();
-  }, 15 * 60 * 1000);
+    runLiveCycle();
+  }, 30 * 60 * 1000);
   // Refresh ONLY the countdown text every 60 seconds (does not re-render inputs)
   countdownInterval = setInterval(updateCountdownsInPlace, 60 * 1000);
 }
@@ -1665,6 +1905,49 @@ async function checkAPIUsage() {
     if (display) display.innerHTML = `<div class="alert alert-error">Could not reach API</div>`;
   }
   if (btn) { btn.disabled = false; btn.textContent = 'Check API usage'; }
+}
+
+async function loadFixtures() {
+  const btn = document.getElementById('btn-load-fixtures');
+  const status = document.getElementById('refresh-status');
+  if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+  const r = await fetchStaticData();
+  if (btn) { btn.disabled = false; btn.textContent = '⬇ Load fixtures & logos'; }
+  if (status) {
+    if (r.error) {
+      status.innerHTML = `<div class="alert alert-error" style="margin-top:8px">${r.error}</div>`;
+    } else {
+      status.innerHTML = `<div class="alert alert-success" style="margin-top:8px">✓ Loaded ${r.count} fixtures and ${r.logos} team logos. The season IS covered by your plan.</div>`;
+    }
+    renderSeasonStatus();
+    setTimeout(() => { if(status) status.innerHTML=''; }, 8000);
+  }
+}
+
+async function refreshStandings() {
+  const btn = document.getElementById('btn-refresh-standings');
+  const status = document.getElementById('refresh-status');
+  if (btn) { btn.disabled = true; btn.textContent = 'Refreshing…'; }
+  const r = await fetchStandings();
+  if (btn) { btn.disabled = false; btn.textContent = '↻ Refresh standings'; }
+  if (status) {
+    if (r.error) status.innerHTML = `<div class="alert alert-error" style="margin-top:8px">${r.error}</div>`;
+    else status.innerHTML = `<div class="alert alert-success" style="margin-top:8px">✓ Standings updated (${r.updated||0} groups).</div>`;
+    setTimeout(() => { if(status) status.innerHTML=''; }, 5000);
+  }
+}
+
+function renderSeasonStatus() {
+  const el = document.getElementById('season-status');
+  if (!el) return;
+  const meta = state.apiMeta || {};
+  if (meta.seasonOK === true) {
+    el.innerHTML = `<div class="alert alert-success" style="margin:0">✓ API connected — 2026 season data is available.${meta.lastStatic?' Fixtures loaded '+riyadhTimeString(meta.lastStatic)+'.':''}</div>`;
+  } else if (meta.seasonOK === false) {
+    el.innerHTML = `<div class="alert alert-error" style="margin:0">⚠ The API did not return 2026 data on the last attempt. Use manual score entry; logos/standings may be unavailable.</div>`;
+  } else {
+    el.innerHTML = `<div class="alert alert-info" style="margin:0">Season coverage not yet tested. Tap “Load fixtures & logos” to check.</div>`;
+  }
 }
 
 async function manualRefresh() {
