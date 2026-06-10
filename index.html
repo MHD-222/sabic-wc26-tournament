@@ -36,7 +36,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .match-card{background:#fff;border:1px solid #C6C8CA;border-radius:10px;padding:12px 14px;margin-bottom:8px;transition:border-color 0.15s}
 .match-card.has-prediction{border-color:#0047BB;border-left:3px solid #0047BB}
 .match-card.has-result{border-color:#C6C8CA;background:#F4F5F6}
-.match-meta{font-size:11px;color:#939598;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.match-meta{font-size:11px;color:#939598;margin-bottom:8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .match-row{display:flex;align-items:center;gap:8px}
 .team-name{flex:1;font-size:13px;font-weight:500;color:#041E42;line-height:1.3}
 .team-name.right{text-align:right}
@@ -348,6 +348,306 @@ const T = {
   }
 };
 
+
+const MATCH_SCHEDULE = {
+  // ==================== GROUP STAGE ====================
+  // GROUP A
+  'GA_MEX_RSA': '2026-06-11T19:00:00Z',   // Mexico vs South Africa
+  'GA_SKO_CZE': '2026-06-12T02:00:00Z',   // South Korea vs Czech Republic
+  'GA_CZE_RSA': '2026-06-18T16:00:00Z',   // Czech Republic vs South Africa
+  'GA_MEX_SKO': '2026-06-19T01:00:00Z',   // Mexico vs South Korea
+  'GA_CZE_MEX': '2026-06-25T01:00:00Z',   // Czech Republic vs Mexico
+  'GA_RSA_SKO': '2026-06-25T01:00:00Z',   // South Africa vs South Korea
+
+  // GROUP B
+  'GB_CAN_BIH': '2026-06-12T19:00:00Z',   // Canada vs Bosnia and Herzegovina
+  'GB_QAT_SUI': '2026-06-13T19:00:00Z',   // Qatar vs Switzerland
+  'GB_SUI_BIH': '2026-06-18T19:00:00Z',   // Switzerland vs Bosnia and Herzegovina
+  'GB_CAN_QAT': '2026-06-18T22:00:00Z',   // Canada vs Qatar
+  'GB_SUI_CAN': '2026-06-24T19:00:00Z',   // Switzerland vs Canada
+  'GB_BIH_QAT': '2026-06-24T19:00:00Z',   // Bosnia and Herzegovina vs Qatar
+
+  // GROUP C
+  'GC_BRA_MAR': '2026-06-13T22:00:00Z',   // Brazil vs Morocco
+  'GC_HAI_SCO': '2026-06-14T01:00:00Z',   // Haiti vs Scotland
+  'GC_SCO_MAR': '2026-06-19T22:00:00Z',   // Scotland vs Morocco
+  'GC_BRA_HAI': '2026-06-20T01:00:00Z',   // Brazil vs Haiti
+  'GC_MAR_HAI': '2026-06-24T22:00:00Z',   // Morocco vs Haiti
+  'GC_SCO_BRA': '2026-06-24T22:00:00Z',   // Scotland vs Brazil
+
+  // GROUP D
+  'GD_USA_PAR': '2026-06-13T00:00:00Z',   // United States vs Paraguay
+  'GD_AUS_TUR': '2026-06-14T04:00:00Z',   // Australia vs Turkey
+  'GD_USA_AUS': '2026-06-19T19:00:00Z',   // United States vs Australia
+  'GD_TUR_PAR': '2026-06-20T04:00:00Z',   // Turkey vs Paraguay
+  'GD_TUR_USA': '2026-06-26T02:00:00Z',   // Turkey vs United States
+  'GD_PAR_AUS': '2026-06-26T02:00:00Z',   // Paraguay vs Australia
+
+  // GROUP E
+  'GE_GER_CUR': '2026-06-14T17:00:00Z',   // Germany vs Curacao
+  'GE_IVC_ECU': '2026-06-14T23:00:00Z',   // Ivory Coast vs Ecuador
+  'GE_GER_IVC': '2026-06-20T20:00:00Z',   // Germany vs Ivory Coast
+  'GE_ECU_CUR': '2026-06-21T00:00:00Z',   // Ecuador vs Curacao
+  'GE_CUR_IVC': '2026-06-25T20:00:00Z',   // Curacao vs Ivory Coast
+  'GE_ECU_GER': '2026-06-25T20:00:00Z',   // Ecuador vs Germany
+
+  // GROUP F
+  'GF_NED_JPN': '2026-06-14T20:00:00Z',   // Netherlands vs Japan
+  'GF_SWE_TUN': '2026-06-15T02:00:00Z',   // Sweden vs Tunisia
+  'GF_NED_SWE': '2026-06-20T17:00:00Z',   // Netherlands vs Sweden
+  'GF_TUN_JPN': '2026-06-21T04:00:00Z',   // Tunisia vs Japan
+  'GF_JPN_SWE': '2026-06-25T23:00:00Z',   // Japan vs Sweden
+  'GF_TUN_NED': '2026-06-25T23:00:00Z',   // Tunisia vs Netherlands
+
+  // GROUP G
+  'GG_BEL_EGY': '2026-06-15T19:00:00Z',   // Belgium vs Egypt
+  'GG_IRN_NZL': '2026-06-16T01:00:00Z',   // Iran vs New Zealand
+  'GG_BEL_IRN': '2026-06-21T19:00:00Z',   // Belgium vs Iran
+  'GG_NZL_EGY': '2026-06-22T01:00:00Z',   // New Zealand vs Egypt
+  'GG_NZL_BEL': '2026-06-27T03:00:00Z',   // New Zealand vs Belgium
+  'GG_EGY_IRN': '2026-06-27T03:00:00Z',   // Egypt vs Iran
+
+  // GROUP H
+  'GH_ESP_CPV': '2026-06-15T16:00:00Z',   // Spain vs Cape Verde
+  'GH_SAU_URU': '2026-06-15T22:00:00Z',   // Saudi Arabia vs Uruguay
+  'GH_ESP_SAU': '2026-06-21T16:00:00Z',   // Spain vs Saudi Arabia
+  'GH_URU_CPV': '2026-06-21T22:00:00Z',   // Uruguay vs Cape Verde
+  'GH_CPV_SAU': '2026-06-27T00:00:00Z',   // Cape Verde vs Saudi Arabia
+  'GH_URU_ESP': '2026-06-27T00:00:00Z',   // Uruguay vs Spain
+
+  // GROUP I
+  'GI_FRA_SEN': '2026-06-16T19:00:00Z',   // France vs Senegal
+  'GI_IRQ_NOR': '2026-06-16T22:00:00Z',   // Iraq vs Norway
+  'GI_FRA_IRQ': '2026-06-22T21:00:00Z',   // France vs Iraq
+  'GI_NOR_SEN': '2026-06-23T00:00:00Z',   // Norway vs Senegal
+  'GI_NOR_FRA': '2026-06-26T19:00:00Z',   // Norway vs France
+  'GI_SEN_IRQ': '2026-06-26T19:00:00Z',   // Senegal vs Iraq
+
+  // GROUP J
+  'GJ_ARG_ALG': '2026-06-17T01:00:00Z',   // Argentina vs Algeria
+  'GJ_AUT_JOR': '2026-06-17T04:00:00Z',   // Austria vs Jordan
+  'GJ_ARG_AUT': '2026-06-22T17:00:00Z',   // Argentina vs Austria
+  'GJ_JOR_ALG': '2026-06-23T03:00:00Z',   // Jordan vs Algeria
+  'GJ_ALG_AUT': '2026-06-28T02:00:00Z',   // Algeria vs Austria
+  'GJ_JOR_ARG': '2026-06-28T02:00:00Z',   // Jordan vs Argentina
+
+  // GROUP K
+  'GK_POR_DRC': '2026-06-17T17:00:00Z',   // Portugal vs DR Congo
+  'GK_UZB_COL': '2026-06-18T02:00:00Z',   // Uzbekistan vs Colombia
+  'GK_POR_UZB': '2026-06-23T17:00:00Z',   // Portugal vs Uzbekistan
+  'GK_COL_DRC': '2026-06-24T02:00:00Z',   // Colombia vs DR Congo
+  'GK_COL_POR': '2026-06-27T23:30:00Z',   // Colombia vs Portugal
+  'GK_DRC_UZB': '2026-06-27T23:30:00Z',   // DR Congo vs Uzbekistan
+
+  // GROUP L
+  'GL_ENG_CRO': '2026-06-17T20:00:00Z',   // England vs Croatia
+  'GL_GHA_PAN': '2026-06-18T23:00:00Z',   // Ghana vs Panama
+  'GL_ENG_GHA': '2026-06-23T20:00:00Z',   // England vs Ghana
+  'GL_PAN_CRO': '2026-06-24T23:00:00Z',   // Panama vs Croatia  (was 01:00 on June 24 CEST)
+  'GL_PAN_ENG': '2026-06-27T21:00:00Z',   // Panama vs England
+  'GL_CRO_GHA': '2026-06-27T21:00:00Z',   // Croatia vs Ghana
+
+  // ==================== KNOCKOUT STAGE ====================
+  // Round of 32
+  'KO_R32_1':  '2026-06-28T19:00:00Z',
+  'KO_R32_2':  '2026-06-29T17:00:00Z',
+  'KO_R32_3':  '2026-06-29T20:30:00Z',
+  'KO_R32_4':  '2026-06-30T01:00:00Z',
+  'KO_R32_5':  '2026-06-30T17:00:00Z',
+  'KO_R32_6':  '2026-06-30T21:00:00Z',
+  'KO_R32_7':  '2026-07-01T01:00:00Z',
+  'KO_R32_8':  '2026-07-01T16:00:00Z',
+  'KO_R32_9':  '2026-07-01T20:00:00Z',
+  'KO_R32_10': '2026-07-02T00:00:00Z',
+  'KO_R32_11': '2026-07-02T19:00:00Z',
+  'KO_R32_12': '2026-07-02T23:00:00Z',
+  'KO_R32_13': '2026-07-03T03:00:00Z',
+  'KO_R32_14': '2026-07-03T18:00:00Z',
+  'KO_R32_15': '2026-07-03T22:00:00Z',
+  'KO_R32_16': '2026-07-04T00:30:00Z',
+
+  // Round of 16
+  'KO_R16_1': '2026-07-04T17:00:00Z',
+  'KO_R16_2': '2026-07-04T21:00:00Z',
+  'KO_R16_3': '2026-07-05T20:00:00Z',
+  'KO_R16_4': '2026-07-06T00:00:00Z',
+  'KO_R16_5': '2026-07-06T19:00:00Z',
+  'KO_R16_6': '2026-07-07T00:00:00Z',
+  'KO_R16_7': '2026-07-07T16:00:00Z',
+  'KO_R16_8': '2026-07-07T20:00:00Z',
+
+  // Quarterfinals
+  'KO_QF_1': '2026-07-09T20:00:00Z',
+  'KO_QF_2': '2026-07-10T19:00:00Z',
+  'KO_QF_3': '2026-07-11T21:00:00Z',
+  'KO_QF_4': '2026-07-12T01:00:00Z',
+
+  // Semifinals
+  'KO_SF_1': '2026-07-14T19:00:00Z',
+  'KO_SF_2': '2026-07-15T19:00:00Z',
+
+  // Final
+  'KO_F_1': '2026-07-19T19:00:00Z'
+};
+
+// Lock time = 30 minutes before kickoff
+function getLockTime(matchId) {
+  const kickoff = MATCH_SCHEDULE[matchId];
+  if (!kickoff) return null;
+  const d = new Date(kickoff);
+  d.setMinutes(d.getMinutes() - 30);
+  return d;
+}
+
+function isMatchLocked(matchId) {
+  const lockTime = getLockTime(matchId);
+  if (!lockTime) return false;
+  return new Date() >= lockTime;
+}
+
+function getTimeUntilLock(matchId) {
+  const lockTime = getLockTime(matchId);
+  if (!lockTime) return null;
+  const diff = lockTime - new Date();
+  return diff; // milliseconds, negative if already locked
+}
+
+function formatCountdown(ms) {
+  if (ms <= 0) return 'Locked';
+  const totalSecs = Math.floor(ms / 1000);
+  const days = Math.floor(totalSecs / 86400);
+  const hours = Math.floor((totalSecs % 86400) / 3600);
+  const mins = Math.floor((totalSecs % 3600) / 60);
+  if (days > 0) return `Locks in ${days}d ${hours}h`;
+  if (hours > 0) return `Locks in ${hours}h ${mins}m`;
+  return `Locks in ${mins}m`;
+}
+
+
+// Map app match ID to schedule key
+function getScheduleKey(matchId) {
+  if (matchId.startsWith('KO_')) {
+    // KO_R32_1 -> KO_R32_1, KO_R16_1 -> KO_R16_1 etc
+    return matchId;
+  }
+  // Group match: GA_0_1 -> need to find the right schedule key
+  // We'll use a lookup based on team names
+  const parts = matchId.split('_');
+  const group = parts[0][1]; // e.g. 'A'
+  const i = parseInt(parts[1]);
+  const j = parseInt(parts[2]);
+  const teams = GROUPS[group];
+  if (!teams) return null;
+  const home = teams[i];
+  const away = teams[j];
+  // Search schedule for matching teams
+  for (const [key, time] of Object.entries(MATCH_SCHEDULE)) {
+    if (!key.startsWith('G')) continue;
+    // key like 'GA_MEX_RSA' - we match by checking if both teams are in the key label
+    // instead, we'll do a reverse lookup from team names
+  }
+  return null;
+}
+
+// Build reverse lookup: "TeamA|TeamB" -> scheduleKey
+const TEAM_PAIR_TO_SCHEDULE = {};
+(function buildLookup() {
+  const groupTeamCodes = {
+    // Group A
+    'Mexico|South Africa': 'GA_MEX_RSA',
+    'South Korea|Czech Republic': 'GA_SKO_CZE',
+    'Czech Republic|South Africa': 'GA_CZE_RSA',
+    'Mexico|South Korea': 'GA_MEX_SKO',
+    'Czech Republic|Mexico': 'GA_CZE_MEX',
+    'South Africa|South Korea': 'GA_RSA_SKO',
+    // Group B
+    'Canada|Bosnia and Herzegovina': 'GB_CAN_BIH',
+    'Qatar|Switzerland': 'GB_QAT_SUI',
+    'Switzerland|Bosnia and Herzegovina': 'GB_SUI_BIH',
+    'Canada|Qatar': 'GB_CAN_QAT',
+    'Switzerland|Canada': 'GB_SUI_CAN',
+    'Bosnia and Herzegovina|Qatar': 'GB_BIH_QAT',
+    // Group C
+    'Brazil|Morocco': 'GC_BRA_MAR',
+    'Haiti|Scotland': 'GC_HAI_SCO',
+    'Scotland|Morocco': 'GC_SCO_MAR',
+    'Brazil|Haiti': 'GC_BRA_HAI',
+    'Morocco|Haiti': 'GC_MAR_HAI',
+    'Scotland|Brazil': 'GC_SCO_BRA',
+    // Group D
+    'United States|Paraguay': 'GD_USA_PAR',
+    'Australia|Turkey': 'GD_AUS_TUR',
+    'United States|Australia': 'GD_USA_AUS',
+    'Turkey|Paraguay': 'GD_TUR_PAR',
+    'Turkey|United States': 'GD_TUR_USA',
+    'Paraguay|Australia': 'GD_PAR_AUS',
+    // Group E
+    'Germany|Curacao': 'GE_GER_CUR',
+    'Ivory Coast|Ecuador': 'GE_IVC_ECU',
+    'Germany|Ivory Coast': 'GE_GER_IVC',
+    'Ecuador|Curacao': 'GE_ECU_CUR',
+    'Curacao|Ivory Coast': 'GE_CUR_IVC',
+    'Ecuador|Germany': 'GE_ECU_GER',
+    // Group F
+    'Netherlands|Japan': 'GF_NED_JPN',
+    'Sweden|Tunisia': 'GF_SWE_TUN',
+    'Netherlands|Sweden': 'GF_NED_SWE',
+    'Tunisia|Japan': 'GF_TUN_JPN',
+    'Japan|Sweden': 'GF_JPN_SWE',
+    'Tunisia|Netherlands': 'GF_TUN_NED',
+    // Group G
+    'Belgium|Egypt': 'GG_BEL_EGY',
+    'Iran|New Zealand': 'GG_IRN_NZL',
+    'Belgium|Iran': 'GG_BEL_IRN',
+    'New Zealand|Egypt': 'GG_NZL_EGY',
+    'New Zealand|Belgium': 'GG_NZL_BEL',
+    'Egypt|Iran': 'GG_EGY_IRN',
+    // Group H
+    'Spain|Cape Verde': 'GH_ESP_CPV',
+    'Saudi Arabia|Uruguay': 'GH_SAU_URU',
+    'Spain|Saudi Arabia': 'GH_ESP_SAU',
+    'Uruguay|Cape Verde': 'GH_URU_CPV',
+    'Cape Verde|Saudi Arabia': 'GH_CPV_SAU',
+    'Uruguay|Spain': 'GH_URU_ESP',
+    // Group I
+    'France|Senegal': 'GI_FRA_SEN',
+    'Iraq|Norway': 'GI_IRQ_NOR',
+    'France|Iraq': 'GI_FRA_IRQ',
+    'Norway|Senegal': 'GI_NOR_SEN',
+    'Norway|France': 'GI_NOR_FRA',
+    'Senegal|Iraq': 'GI_SEN_IRQ',
+    // Group J
+    'Argentina|Algeria': 'GJ_ARG_ALG',
+    'Austria|Jordan': 'GJ_AUT_JOR',
+    'Argentina|Austria': 'GJ_ARG_AUT',
+    'Jordan|Algeria': 'GJ_JOR_ALG',
+    'Algeria|Austria': 'GJ_ALG_AUT',
+    'Jordan|Argentina': 'GJ_JOR_ARG',
+    // Group K
+    'Portugal|DR Congo': 'GK_POR_DRC',
+    'Uzbekistan|Colombia': 'GK_UZB_COL',
+    'Portugal|Uzbekistan': 'GK_POR_UZB',
+    'Colombia|DR Congo': 'GK_COL_DRC',
+    'Colombia|Portugal': 'GK_COL_POR',
+    'DR Congo|Uzbekistan': 'GK_DRC_UZB',
+    // Group L
+    'England|Croatia': 'GL_ENG_CRO',
+    'Ghana|Panama': 'GL_GHA_PAN',
+    'England|Ghana': 'GL_ENG_GHA',
+    'Panama|Croatia': 'GL_PAN_CRO',
+    'Panama|England': 'GL_PAN_ENG',
+    'Croatia|Ghana': 'GL_CRO_GHA'
+  };
+  Object.assign(TEAM_PAIR_TO_SCHEDULE, groupTeamCodes);
+})();
+
+function getScheduleKeyForMatch(matchId, homeTeam, awayTeam) {
+  if (matchId.startsWith('KO_')) return matchId;
+  const key = homeTeam + '|' + awayTeam;
+  return TEAM_PAIR_TO_SCHEDULE[key] || null;
+}
+
+
 const GROUPS = {
   'A':['Mexico','South Africa','South Korea','Czech Republic'],
   'B':['Canada','Bosnia and Herzegovina','Qatar','Switzerland'],
@@ -638,26 +938,31 @@ function renderKnockout(){
       const saved=userPreds[mid];
       const result=state.results[mid];
       const isDraw = saved && saved.h!==undefined && saved.a!==undefined && parseInt(saved.h)===parseInt(saved.a);
+      const koLocked = result || isMatchLocked(mid);
+      const koCountdown = formatCountdown(getTimeUntilLock(mid));
       const card=document.createElement('div');
       card.className='match-card'+(saved?' has-prediction':'')+(result?' has-result':'');
       card.innerHTML=`
         <div class="match-meta">
           ${lang==='ar'?round.labelAr:round.label} · ${lang==='ar'?'مباراة':'Match'} ${i+1}
           ${result?`<span class="badge badge-result">Result: ${result.h}–${result.a}${result.pen?' (pen: '+result.pen+')':''}</span>`:''}
-          ${saved&&!result?`<span class="badge badge-saved">${lang==='ar'?'محفوظ':'Saved'}</span>`:''}
+          ${koLocked&&!result?`<span class="badge badge-locked">🔒 Locked</span>`:''}
+          ${saved&&!result&&!koLocked?`<span class="badge badge-saved">${lang==='ar'?'محفوظ':'Saved'}</span>`:''}
+          ${!koLocked&&MATCH_SCHEDULE[mid]?`<span style="font-size:11px;color:#939598;margin-left:auto">${koCountdown}</span>`:''}
         </div>
         <div class="match-row">
           <span class="team-name" style="color:#939598">${lang==='ar'?'لم يُحدد':'TBD'}</span>
-          <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="–" inputmode="numeric" ${result?'disabled':''} oninput="updateWinIndicator('${mid}');togglePenaltyRow('${mid}')"/>
+          <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="–" inputmode="numeric" ${koLocked?'disabled':''} oninput="updateWinIndicator('${mid}');togglePenaltyRow('${mid}')"/>
           <span class="vs">vs</span>
-          <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="–" inputmode="numeric" ${result?'disabled':''} oninput="updateWinIndicator('${mid}');togglePenaltyRow('${mid}')"/>
+          <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="–" inputmode="numeric" ${koLocked?'disabled':''} oninput="updateWinIndicator('${mid}');togglePenaltyRow('${mid}')"/>
           <span class="team-name right" style="color:#939598">${lang==='ar'?'لم يُحدد':'TBD'}</span>
         </div>
         <div class="penalty-row" id="${mid}_pen_row" style="display:${isDraw?'flex':'none'}">
           <span class="penalty-label">🏆 ${lang==='ar'?'الفائز بركلات الترجيح:':'Penalty winner:'}</span>
-          <button class="penalty-btn${saved&&saved.pen==='H'?' selected':''}" id="${mid}_pen_H" onclick="selectPenalty('${mid}','H')" ${result?'disabled':''}>
+          <button class="penalty-btn${saved&&saved.pen==='H'?' selected':''}" id="${mid}_pen_H" onclick="selectPenalty('${mid}','H')" ${koLocked?'disabled':''}>
             ${lang==='ar'?'الفريق الأول':'Team A (left)'}</button>
-          <button class="penalty-btn${saved&&saved.pen==='A'?' selected':''}" id="${mid}_pen_A" onclick="selectPenalty('${mid}','A')" ${result?'disabled':''}>
+          <button class="penalty-btn${saved&&saved.pen==='A'?' selected':''}" id="${mid}_pen_A" onclick="selectPenalty('${mid}','A')" ${koLocked?'disabled':''}>
+
             ${lang==='ar'?'الفريق الثاني':'Team B (right)'}</button>
         </div>`;
       container.appendChild(card);
