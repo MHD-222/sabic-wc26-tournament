@@ -186,7 +186,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <!-- KNOCKOUT TAB -->
     <div id="tab-knockout" class="tab-content">
       <p class="section-title" id="title-knockout">Knockout stage</p>
-      <p class="section-sub" id="sub-knockout">Each prediction locks 5 minutes before kickoff. Scores based on 90 minutes only — extra time and penalties don't count.</p>
+      <p class="section-sub" id="sub-knockout">Each prediction locks 5 minutes before kickoff. Scores are based on the full match final score including extra time.</p>
       <div id="knockout-container"></div>
       <div style="height:70px"></div>
     </div>
@@ -224,7 +224,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="admin-block">
         <h3>Players & PINs</h3>
         <table class="pin-table">
-          <thead><tr><th>Name</th><th>PIN</th><th>Predictions saved</th><th>Champion pick</th></tr></thead>
+          <thead><tr><th>Name</th><th>PIN</th><th>Predictions</th><th>Champion</th><th>Actions</th></tr></thead>
           <tbody id="players-tbody"></tbody>
         </table>
         <div class="inline-form" style="margin-top:12px">
@@ -233,11 +233,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           <button class="btn btn-sm btn-primary" onclick="addPlayer()">Add player</button>
         </div>
         <div id="add-player-msg" style="margin-top:8px"></div>
+        <div id="edit-player-form" style="display:none;margin-top:12px;padding:12px;background:#E8EEF8;border-radius:8px;border:1px solid #99B8E8">
+          <p style="font-size:13px;font-weight:600;color:#041E42;margin-bottom:8px">Edit player: <span id="edit-player-name-label"></span></p>
+          <div class="inline-form">
+            <input class="inline-input" type="text" id="edit-name-inp" placeholder="New name" style="flex:1;min-width:120px"/>
+            <input class="inline-input" type="text" id="edit-pin-inp" placeholder="New PIN" maxlength="4" style="width:70px" inputmode="numeric"/>
+            <button class="btn btn-sm btn-primary" onclick="saveEditPlayer()">Save</button>
+            <button class="btn btn-sm" onclick="cancelEditPlayer()">Cancel</button>
+          </div>
+          <div id="edit-player-msg" style="margin-top:8px"></div>
+        </div>
       </div>
 
       <div class="admin-block">
         <h3>Enter match result</h3>
-        <p style="font-size:12px;color:#939598;margin-bottom:10px">Select a match, enter the final score at 90 minutes, and save. Points are calculated automatically.</p>
+        <p style="font-size:12px;color:#939598;margin-bottom:10px">Select a match, enter the full time final score, and save. Points are calculated automatically.</p>
         <div class="field">
           <label>Match</label>
           <select id="result-select" style="font-size:13px"></select>
@@ -908,23 +918,29 @@ function renderGroups(){
         const mid=`G${g}_${i}_${j}`;
         const saved=userPreds[mid];
         const result=state.results[mid];
+        const schedKey=getScheduleKeyForMatch(mid,teams[i],teams[j]);
+        const locked=result||isMatchLocked(schedKey||mid);
+        const msLeft=schedKey?getTimeUntilLock(schedKey):null;
+        const countdown=msLeft!==null?formatCountdown(msLeft):'';
         const card=document.createElement('div');
-        card.className='match-card'+(saved?' has-prediction':'')+(result?' has-result':'');
+        card.className='match-card'+(saved&&!locked?' has-prediction':'')+(result?' has-result':'')+(locked&&!result?' has-result':'');
         card.innerHTML=`
           <div class="match-meta">
             Group ${g}
             ${result?`<span class="badge badge-result">Result: ${result.h}–${result.a}</span>`:''}
-            ${saved&&!result?`<span class="badge badge-saved">${lang==='ar'?'محفوظ':'Saved'}</span>`:''}
+            ${locked&&!result?`<span class="badge badge-locked">🔒 Locked</span>`:''}
+            ${saved&&!result&&!locked?`<span class="badge badge-saved">${lang==='ar'?'محفوظ':'Saved'}</span>`:''}
+            ${!locked&&countdown?`<span style="font-size:11px;color:#939598;margin-left:auto">${countdown}</span>`:''}
           </div>
           <div class="match-row">
-            <span class="team-name">${teams[i]}</span>
-            <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="–" inputmode="numeric" ${result?'disabled':''} oninput="updateWinIndicator('${mid}')"/>
+            <span class="team-name${locked&&!result?' losing':''}">${teams[i]}</span>
+            <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="–" inputmode="numeric" ${locked?'disabled':''} oninput="updateWinIndicator('${mid}');togglePenaltyRow('${mid}')"/>
             <span class="vs">vs</span>
-            <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="–" inputmode="numeric" ${result?'disabled':''} oninput="updateWinIndicator('${mid}')"/>
-            <span class="team-name right">${teams[j]}</span>
+            <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="–" inputmode="numeric" ${locked?'disabled':''} oninput="updateWinIndicator('${mid}');togglePenaltyRow('${mid}')"/>
+            <span class="team-name right${locked&&!result?' losing':''}">${teams[j]}</span>
           </div>`;
         container.appendChild(card);
-        if(saved) updateWinIndicator(mid);
+        if(saved&&!locked) updateWinIndicator(mid);
       }
     }
   });
@@ -1262,6 +1278,59 @@ function resetResult(matchId) {
     msg.innerHTML = `<div class="alert alert-warn">Result for ${matchId} has been reset.</div>`;
     setTimeout(() => { msg.innerHTML = ''; }, 3000);
   }
+}
+
+
+let editingPlayer = null;
+
+function editPlayer(name) {
+  editingPlayer = name;
+  document.getElementById('edit-player-form').style.display = 'block';
+  document.getElementById('edit-player-name-label').textContent = name;
+  document.getElementById('edit-name-inp').value = name;
+  document.getElementById('edit-pin-inp').value = state.players[name].pin;
+  document.getElementById('edit-player-msg').innerHTML = '';
+  document.getElementById('edit-name-inp').focus();
+}
+
+function cancelEditPlayer() {
+  editingPlayer = null;
+  document.getElementById('edit-player-form').style.display = 'none';
+}
+
+function saveEditPlayer() {
+  const newName = document.getElementById('edit-name-inp').value.trim();
+  const newPin = document.getElementById('edit-pin-inp').value.trim();
+  const msg = document.getElementById('edit-player-msg');
+  if (!newName) { msg.innerHTML = '<span class="alert alert-error" style="display:inline-block">Name cannot be empty.</span>'; return; }
+  if (newPin.length !== 4) { msg.innerHTML = '<span class="alert alert-error" style="display:inline-block">PIN must be 4 digits.</span>'; return; }
+  if (newName !== editingPlayer && Object.values(state.players).find(p => p.name.toLowerCase() === newName.toLowerCase())) {
+    msg.innerHTML = '<span class="alert alert-error" style="display:inline-block">That name is already taken.</span>'; return;
+  }
+  const oldName = editingPlayer;
+  delete state.players[oldName];
+  state.players[newName] = { name: newName, pin: newPin };
+  if (state.predictions[oldName]) { state.predictions[newName] = state.predictions[oldName]; delete state.predictions[oldName]; }
+  if (state.champion_picks[oldName]) { state.champion_picks[newName] = state.champion_picks[oldName]; delete state.champion_picks[oldName]; }
+  saveStateToSheet();
+  cancelEditPlayer();
+  renderAdmin();
+  renderLeaderboard();
+  const addMsg = document.getElementById('add-player-msg');
+  if (addMsg) { addMsg.innerHTML = `<span class="alert alert-success" style="display:inline-block">✓ Player updated.</span>`; setTimeout(() => { addMsg.innerHTML = ''; }, 3000); }
+}
+
+function removePlayer(name) {
+  if (!confirm('Remove ' + name + ' from the tournament? Their predictions will also be deleted.')) return;
+  delete state.players[name];
+  delete state.predictions[name];
+  delete state.champion_picks[name];
+  if (state.pending) state.pending = state.pending.filter(p => p.name !== name);
+  saveStateToSheet();
+  renderAdmin();
+  renderLeaderboard();
+  const msg = document.getElementById('add-player-msg');
+  if (msg) { msg.innerHTML = '<span class="alert alert-success" style="display:inline-block">✓ ' + name + ' removed.</span>'; setTimeout(() => { msg.innerHTML = ''; }, 3000); }
 }
 
 function approvePlayer(index){
