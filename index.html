@@ -186,7 +186,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <!-- KNOCKOUT TAB -->
     <div id="tab-knockout" class="tab-content">
       <p class="section-title" id="title-knockout">Knockout stage</p>
-      <p class="section-sub" id="sub-knockout">Each prediction locks 30 minutes before kickoff. Scores based on 90 minutes only — extra time and penalties don't count.</p>
+      <p class="section-sub" id="sub-knockout">Each prediction locks 5 minutes before kickoff. Scores based on 90 minutes only — extra time and penalties don't count.</p>
       <div id="knockout-container"></div>
       <div style="height:70px"></div>
     </div>
@@ -308,7 +308,7 @@ const T = {
     title_groups: 'Group stage predictions',
     sub_groups: 'Predict the score of all 72 group stage matches. Must be submitted before the opening match kicks off.',
     title_ko: 'Knockout stage',
-    sub_ko: 'Each prediction locks 30 minutes before kickoff. Scores are based on the full match final score including extra time and penalties.',
+    sub_ko: 'Each prediction locks 5 minutes before kickoff. Scores are based on the full match final score including extra time and penalties.',
     title_champ: 'Champion pick',
     sub_champ: 'Pick the team you think wins the World Cup. Worth +10 bonus points. Locks before the opening match.',
     title_lb: 'Leaderboard',
@@ -495,7 +495,7 @@ function getLockTime(matchId) {
   const kickoff = MATCH_SCHEDULE[matchId];
   if (!kickoff) return null;
   const d = new Date(kickoff);
-  d.setMinutes(d.getMinutes() - 30);
+  d.setMinutes(d.getMinutes() - 5);
   return d;
 }
 
