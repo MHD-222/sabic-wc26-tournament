@@ -274,6 +274,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div id="refresh-status"></div>
       </div>
       <div class="admin-block">
+        <h3>Results entered</h3>
+        <p style="font-size:12px;color:#939598;margin-bottom:10px">All results currently saved. Click Reset to remove a result and re-enter it.</p>
+        <div id="results-list"></div>
+      </div>
+
+      <div class="admin-block">
         <h3>Google Sheet (your private data store)</h3>
         <p style="font-size:12px;color:#939598;margin-bottom:10px">Every prediction and result is saved here. Only accessible with your Google account.</p>
         <a href="https://docs.google.com/spreadsheets/d/1yzF14Kvqg5LE7JJaqZknOweDRYHBEM1YW208PsKjggs/edit" target="_blank" class="sheet-link">
@@ -1099,6 +1105,22 @@ function renderAdmin(){
 
   const csel=document.getElementById('champ-winner-select');
   csel.innerHTML=ALL_TEAMS.map(t=>`<option value="${t}"${state.actual_champion===t?' selected':''}>${t}</option>`).join('');
+
+  // Render results list with reset buttons
+  const resultsList = document.getElementById('results-list');
+  if (resultsList) {
+    const entries = Object.entries(state.results).filter(([k]) => k !== 'CHAMPION_LOCKED');
+    if (!entries.length) {
+      resultsList.innerHTML = `<p style="font-size:13px;color:#939598">No results entered yet.</p>`;
+    } else {
+      resultsList.innerHTML = entries.map(([mid, r]) => `
+        <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:0.5px solid #E6E7E8">
+          <span style="flex:1;font-size:13px;color:#041E42;font-weight:500">${mid}</span>
+          <span style="font-size:13px;color:#0047BB;font-weight:600">${r.h}–${r.a}${r.pen?' (pen: '+r.pen+')':''}</span>
+          <button class="btn btn-sm" onclick="resetResult('${mid}')" style="border-color:#E35205;color:#E35205;padding:4px 10px;font-size:12px">Reset</button>
+        </div>`).join('');
+    }
+  }
 }
 
 function addPlayer(){
@@ -1135,8 +1157,9 @@ async function submitResult(){
   await saveStateToSheet();
   btn.disabled=false; btn.textContent='Save result';
   const msg=document.getElementById('result-msg');
+  const matchLabel = document.getElementById('result-select').options[document.getElementById('result-select').selectedIndex].text;
   msg.innerHTML=`<div class="alert alert-success">✓ Result saved: ${h}–${a}. Leaderboard updated.</div>`;
-  renderLeaderboard(); renderGroups(); renderKnockout();
+  renderLeaderboard(); renderGroups(); renderKnockout(); renderAdmin();
   setTimeout(()=>{msg.innerHTML='';},3000);
 }
 
@@ -1223,6 +1246,22 @@ function selectAdminPenalty(team){
   penA.classList.remove('selected');
   if(team==='H') penH.classList.add('selected');
   else if(team==='A') penA.classList.add('selected');
+}
+
+
+function resetResult(matchId) {
+  if (!confirm(`Reset result for ${matchId}? This will recalculate all scores.`)) return;
+  delete state.results[matchId];
+  saveStateToSheet();
+  renderLeaderboard();
+  renderGroups();
+  renderKnockout();
+  renderAdmin();
+  const msg = document.getElementById('result-msg');
+  if (msg) {
+    msg.innerHTML = `<div class="alert alert-warn">Result for ${matchId} has been reset.</div>`;
+    setTimeout(() => { msg.innerHTML = ''; }, 3000);
+  }
 }
 
 function approvePlayer(index){
