@@ -44,6 +44,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .score-input:focus{border-color:#0047BB}
 .score-input:disabled{background:#F4F5F6;color:#939598}
 .vs{font-size:11px;color:#939598;min-width:14px;text-align:center}
+.team-name.winning{color:#0047BB;font-weight:700}
+.team-name.losing{color:#939598;font-weight:400}
+.score-input.winning{border-color:#0047BB;color:#0047BB}
 .badge{display:inline-flex;align-items:center;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600}
 .badge-saved{background:#0047BB;color:#fff}
 .badge-locked{background:#E6E7E8;color:#939598}
@@ -275,8 +278,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 
 <script>
-const SHEET_ID = '1yzF14Kvqg5LE7JJaqZknOweDRYHBEM1YW208PsKjggs';
-const MODEL = 'claude-sonnet-4-20250514';
 
 let lang = 'en';
 let currentUser = null;
@@ -383,64 +384,46 @@ function applyLangToMain(){
   document.getElementById('title-lb').textContent = t('title_lb');
 }
 
-async function apiCall(prompt, system) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({
-      model: MODEL, max_tokens: 2000,
-      system: system || 'You are a JSON data manager. Respond ONLY with valid JSON, no markdown, no explanation.',
-      messages:[{role:'user', content: prompt}],
-      mcp_servers:[{type:'url', url:'https://drivemcp.googleapis.com/mcp/v1', name:'gdrive'}]
-    })
-  });
-  const data = await res.json();
-  const txt = data.content.filter(b=>b.type==='text').map(b=>b.text).join('');
-  return JSON.parse(txt.replace(/```json|```/g,'').trim());
-}
+const GAS_URL = 'https://script.google.com/macros/s/AKfycby1wRftH0r-H-gvdqS1TTxoorqlvvNznyHIHEEW97Pzx0b1WzySWAgNjxXIJCpnyMfs1A/exec';
+const SECRET = 'SABICWC26';
 
 async function loadStateFromSheet() {
   try {
-    const result = await apiCall(
-      `Read the Google Sheet with ID "${SHEET_ID}". It contains tournament state as JSON in a cell. Return the JSON object stored there. If the sheet is empty or has no JSON, return {"players":{"Admin":{"name":"Admin","pin":"5852"}},"predictions":{},"results":{},"champion_picks":{},"actual_champion":null,"pending":[]}`,
-      `You manage a World Cup prediction tournament. Use the Google Drive MCP to read the sheet. The sheet stores state as a JSON string. Extract and return ONLY the JSON object, nothing else.`
-    );
-    if(result && result.players) state = result;
+    const url = GAS_URL + '?action=load&secret=' + SECRET;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data && data.players) {
+      state = data;
+    } else {
+      setDefaultState();
+    }
   } catch(e) {
-    state = {players:{'Admin':{name:'Admin',pin:'5852'}},predictions:{},results:{},champion_picks:{},actual_champion:null,pending:[]};
+    console.warn('Load failed, using default state', e);
+    setDefaultState();
   }
 }
 
 async function saveStateToSheet() {
-  const csv = buildCSV();
   try {
-    await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        model: MODEL, max_tokens: 500,
-        system: 'You write tournament data to Google Sheets via the Drive MCP. Confirm with {"status":"saved"}',
-        messages:[{role:'user', content:`Write this CSV data to Google Sheet ID "${SHEET_ID}". Replace all existing content. The first row should be the JSON state for recovery: ${JSON.stringify(state)}\n\nFormatted CSV:\n${csv}`}],
-        mcp_servers:[{type:'url', url:'https://drivemcp.googleapis.com/mcp/v1', name:'gdrive'}]
-      })
-    });
-  } catch(e){ console.warn('Sheet sync failed',e); }
+    const payload = encodeURIComponent(JSON.stringify(state));
+    const url = GAS_URL + '?action=save&secret=' + SECRET + '&data=' + payload;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.status !== 'saved') console.warn('Save response:', data);
+  } catch(e) {
+    console.warn('Save failed', e);
+  }
 }
 
-function buildCSV(){
-  const rows=[['STATE_JSON', JSON.stringify(state)],[''],
-    ['=== PLAYERS ===','','',''],
-    ['Name','PIN','Champion Pick','Predictions Count'],
-    ...Object.values(state.players).map(p=>[p.name,p.pin,state.champion_picks[p.name]||'',Object.keys(state.predictions[p.name]||{}).length]),
-    [''],['=== PREDICTIONS ===','','',''],
-    ['Player','Match ID','Home Score','Away Score'],
-    ...Object.entries(state.predictions).flatMap(([pname,preds])=>Object.entries(preds).map(([mid,s])=>[pname,mid,s.h,s.a])),
-    [''],['=== RESULTS ===','','',''],
-    ['Match ID','Home Score','Away Score',''],
-    ...Object.entries(state.results).map(([mid,s])=>[mid,s.h,s.a,'']),
-    [''],['Actual Champion',state.actual_champion||'','','']
-  ];
-  return rows.map(r=>r.map(c=>`"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+function setDefaultState() {
+  state = {
+    players: { 'Admin': { name: 'Admin', pin: '5852' } },
+    predictions: {},
+    results: {},
+    champion_picks: {},
+    actual_champion: null,
+    pending: []
+  };
 }
 
 function doLogin(){
@@ -462,6 +445,39 @@ function doLogin(){
   renderChampion();
   renderLeaderboard();
   if(currentUser.isAdmin) renderAdmin();
+}
+
+
+function updateWinIndicator(matchId) {
+  const hInput = document.getElementById(matchId + '_h');
+  const aInput = document.getElementById(matchId + '_a');
+  const card = hInput ? hInput.closest('.match-card') : null;
+  if (!card) return;
+  const homeEl = card.querySelector('.team-name:not(.right)');
+  const awayEl = card.querySelector('.team-name.right');
+  const h = parseInt(hInput.value);
+  const a = parseInt(aInput.value);
+  if (isNaN(h) || isNaN(a) || (hInput.value === '' && aInput.value === '')) {
+    homeEl.classList.remove('winning','losing');
+    awayEl.classList.remove('winning','losing');
+    hInput.classList.remove('winning');
+    aInput.classList.remove('winning');
+    return;
+  }
+  if (h > a) {
+    homeEl.classList.add('winning'); homeEl.classList.remove('losing');
+    awayEl.classList.add('losing');  awayEl.classList.remove('winning');
+    hInput.classList.add('winning');  aInput.classList.remove('winning');
+  } else if (a > h) {
+    awayEl.classList.add('winning'); awayEl.classList.remove('losing');
+    homeEl.classList.add('losing');  homeEl.classList.remove('winning');
+    aInput.classList.add('winning');  hInput.classList.remove('winning');
+  } else {
+    homeEl.classList.remove('winning','losing');
+    awayEl.classList.remove('winning','losing');
+    hInput.classList.remove('winning');
+    aInput.classList.remove('winning');
+  }
 }
 
 function switchMode(mode){
@@ -543,12 +559,13 @@ function renderGroups(){
           </div>
           <div class="match-row">
             <span class="team-name">${teams[i]}</span>
-            <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="0" ${result?'disabled':''}/>
+            <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="–" ${result?'disabled':''} oninput="updateWinIndicator('${mid}')"/>
             <span class="vs">vs</span>
-            <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="0" ${result?'disabled':''}/>
+            <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="–" ${result?'disabled':''} oninput="updateWinIndicator('${mid}')"/>
             <span class="team-name right">${teams[j]}</span>
           </div>`;
         container.appendChild(card);
+        if(saved) updateWinIndicator(mid);
       }
     }
   });
@@ -577,9 +594,9 @@ function renderKnockout(){
         </div>
         <div class="match-row">
           <span class="team-name" style="color:#939598">${lang==='ar'?'لم يُحدد':'TBD'}</span>
-          <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="0" ${result?'disabled':''}/>
+          <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="–" ${result?'disabled':''} oninput="updateWinIndicator('${mid}')"/>
           <span class="vs">vs</span>
-          <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="0" ${result?'disabled':''}/>
+          <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="0" ${result?'disabled':''} oninput="updateWinIndicator('${mid}')"/>
           <span class="team-name right" style="color:#939598">${lang==='ar'?'لم يُحدد':'TBD'}</span>
         </div>`;
       container.appendChild(card);
