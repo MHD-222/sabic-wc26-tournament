@@ -44,6 +44,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .score-input:focus{border-color:#0047BB}
 .score-input:disabled{background:#F4F5F6;color:#939598}
 .vs{font-size:11px;color:#939598;min-width:14px;text-align:center}
+.penalty-row{display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed #C6C8CA}
+.penalty-label{font-size:11px;color:#939598;white-space:nowrap}
+.penalty-btn{flex:1;padding:6px 8px;border:1px solid #C6C8CA;border-radius:7px;font-size:12px;font-weight:500;cursor:pointer;background:#fff;color:#404D4D;font-family:inherit;transition:all 0.15s;text-align:center}
+.penalty-btn:hover{border-color:#FFA300}
+.penalty-btn.selected{background:#FFA300;color:#fff;border-color:#FFA300;font-weight:700}
+.penalty-btn:disabled{opacity:0.5;cursor:not-allowed}
 .team-name.winning{color:#0047BB;font-weight:700}
 .team-name.losing{color:#939598;font-weight:400}
 .score-input.winning{border-color:#0047BB;color:#0047BB}
@@ -292,7 +298,7 @@ const T = {
     title_groups: 'Group stage predictions',
     sub_groups: 'Predict the score of all 72 group stage matches. Must be submitted before the opening match kicks off.',
     title_ko: 'Knockout stage',
-    sub_ko: 'Each prediction locks 30 minutes before kickoff. Scores based on 90 minutes only.',
+    sub_ko: 'Each prediction locks 30 minutes before kickoff. Scores are based on the full match final score including extra time.',
     title_champ: 'Champion pick',
     sub_champ: 'Pick the team you think wins the World Cup. Worth +10 bonus points. Locks before the opening match.',
     title_lb: 'Leaderboard',
@@ -310,12 +316,12 @@ const T = {
   ar: {
     hdr: 'بطولة SABIC SC لتوقعات كأس العالم 2026',
     name: 'اسمك', pin: 'رمز PIN (4 أرقام)', signin: 'دخول',
-    contact: 'ليس لديك PIN؟ تواصل مع مدير البطولة.',
+    contact: 'ليس لديك رمز؟ تواصل مع مدير البطولة.',
     groups: 'المجموعات', knockout: 'إقصائي', champion: 'البطل', lb: 'الترتيب', admin: 'الإدارة',
     title_groups: 'توقعات دور المجموعات',
     sub_groups: 'توقع نتيجة جميع مباريات دور المجموعات الـ72. يجب الإرسال قبل انطلاق البطولة.',
     title_ko: 'الأدوار الإقصائية',
-    sub_ko: 'تُقفل التوقعات قبل 30 دقيقة من كل مباراة. النتائج على أساس 90 دقيقة فقط.',
+    sub_ko: 'تُقفل التوقعات قبل 30 دقيقة من كل مباراة. النتائج على أساس النتيجة النهائية للمباراة شاملة الوقت الإضافي.',
     title_champ: 'اختيار البطل',
     sub_champ: 'اختر الفريق الذي تعتقد أنه سيفوز بكأس العالم. يساوي +10 نقاط إضافية.',
     title_lb: 'ترتيب اللاعبين',
@@ -333,18 +339,18 @@ const T = {
 };
 
 const GROUPS = {
-  'A':['Mexico','Poland','Saudi Arabia','Argentina'],
-  'B':['USA','England','Iran','Wales'],
-  'C':['France','Australia','Denmark','Tunisia'],
-  'D':['Spain','Japan','Costa Rica','Germany'],
-  'E':['Brazil','Serbia','Switzerland','Cameroon'],
-  'F':['Morocco','Croatia','Belgium','Canada'],
-  'G':['Portugal','Ghana','Uruguay','South Korea'],
-  'H':['Netherlands','Ecuador','Qatar','Senegal'],
-  'I':['Italy','New Zealand','Colombia','Honduras'],
-  'J':['Paraguay','Nigeria','Turkey','Chile'],
-  'K':['Algeria','El Salvador','DR Congo','Ukraine'],
-  'L':['Scotland','Venezuela','Egypt','Jamaica']
+  'A':['Mexico','South Africa','South Korea','Czech Republic'],
+  'B':['Canada','Bosnia and Herzegovina','Qatar','Switzerland'],
+  'C':['Brazil','Morocco','Haiti','Scotland'],
+  'D':['United States','Paraguay','Australia','Turkey'],
+  'E':['Germany','Curacao','Ivory Coast','Ecuador'],
+  'F':['Netherlands','Japan','Sweden','Tunisia'],
+  'G':['Belgium','Egypt','Iran','New Zealand'],
+  'H':['Spain','Cape Verde','Saudi Arabia','Uruguay'],
+  'I':['France','Senegal','Iraq','Norway'],
+  'J':['Argentina','Algeria','Austria','Jordan'],
+  'K':['Portugal','DR Congo','Uzbekistan','Colombia'],
+  'L':['England','Croatia','Ghana','Panama']
 };
 
 const KO_ROUNDS = [
@@ -480,6 +486,36 @@ function updateWinIndicator(matchId) {
   }
 }
 
+
+function togglePenaltyRow(matchId) {
+  const h = document.getElementById(matchId + '_h');
+  const a = document.getElementById(matchId + '_a');
+  const penRow = document.getElementById(matchId + '_pen_row');
+  if (!h || !a || !penRow) return;
+  const hVal = h.value;
+  const aVal = a.value;
+  if (hVal !== '' && aVal !== '' && parseInt(hVal) === parseInt(aVal)) {
+    penRow.style.display = 'flex';
+  } else {
+    penRow.style.display = 'none';
+    // clear penalty selection if score is no longer a draw
+    const penH = document.getElementById(matchId + '_pen_H');
+    const penA = document.getElementById(matchId + '_pen_A');
+    if (penH) penH.classList.remove('selected');
+    if (penA) penA.classList.remove('selected');
+  }
+}
+
+function selectPenalty(matchId, team) {
+  const penH = document.getElementById(matchId + '_pen_H');
+  const penA = document.getElementById(matchId + '_pen_A');
+  if (!penH || !penA) return;
+  penH.classList.remove('selected');
+  penA.classList.remove('selected');
+  if (team === 'H') penH.classList.add('selected');
+  else penA.classList.add('selected');
+}
+
 function switchMode(mode){
   const signinBtn = document.getElementById('mode-signin-btn');
   const registerBtn = document.getElementById('mode-register-btn');
@@ -559,9 +595,9 @@ function renderGroups(){
           </div>
           <div class="match-row">
             <span class="team-name">${teams[i]}</span>
-            <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="–" ${result?'disabled':''} oninput="updateWinIndicator('${mid}')"/>
+            <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="–" inputmode="numeric" ${result?'disabled':''} oninput="updateWinIndicator('${mid}')"/>
             <span class="vs">vs</span>
-            <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="–" ${result?'disabled':''} oninput="updateWinIndicator('${mid}')"/>
+            <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="–" inputmode="numeric" ${result?'disabled':''} oninput="updateWinIndicator('${mid}')"/>
             <span class="team-name right">${teams[j]}</span>
           </div>`;
         container.appendChild(card);
@@ -594,9 +630,9 @@ function renderKnockout(){
         </div>
         <div class="match-row">
           <span class="team-name" style="color:#939598">${lang==='ar'?'لم يُحدد':'TBD'}</span>
-          <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="–" ${result?'disabled':''} oninput="updateWinIndicator('${mid}')"/>
+          <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="–" inputmode="numeric" ${result?'disabled':''} oninput="updateWinIndicator('${mid}')"/>
           <span class="vs">vs</span>
-          <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="0" ${result?'disabled':''} oninput="updateWinIndicator('${mid}')"/>
+          <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="–" inputmode="numeric" ${result?'disabled':''} oninput="updateWinIndicator('${mid}')"/>
           <span class="team-name right" style="color:#939598">${lang==='ar'?'لم يُحدد':'TBD'}</span>
         </div>`;
       container.appendChild(card);
@@ -635,12 +671,25 @@ function renderLeaderboard(){
       let mult=1;
       if(mid.includes('KO_QF')) mult=2;
       if(mid.includes('KO_SF')||mid.includes('KO_F_')) mult=3;
-      if(parseInt(pred.h)===result.h&&parseInt(pred.a)===result.a){
-        scores[pname]=(scores[pname]||0)+3*mult;
-      } else {
-        const pr=parseInt(pred.h)>parseInt(pred.a)?'H':parseInt(pred.h)<parseInt(pred.a)?'A':'D';
-        const ar=result.h>result.a?'H':result.h<result.a?'A':'D';
-        if(pr===ar) scores[pname]=(scores[pname]||0)+1*mult;
+      const pH=parseInt(pred.h); const pA=parseInt(pred.a);
+      const rH=result.h; const rA=result.a;
+      // Determine actual winner (considering penalties)
+      let actualWinner = rH>rA?'H':rH<rA?'A':'D';
+      if(actualWinner==='D'&&result.pen) actualWinner=result.pen; // penalty winner
+      // Determine predicted winner
+      let predWinner = pH>pA?'H':pH<pA?'A':'D';
+      if(predWinner==='D'&&pred.pen) predWinner=pred.pen; // predicted penalty winner
+      // Exact score check (draw score must also match penalty winner if applicable)
+      const exactScore = pH===rH && pA===rA;
+      const exactPen = !result.pen || pred.pen===result.pen;
+      if(exactScore && exactPen){
+        scores[pname]=(scores[pname]||0)+3*mult; // full points
+      } else if(predWinner!=='D' && predWinner===actualWinner){
+        scores[pname]=(scores[pname]||0)+1*mult; // correct winner
+      } else if(predWinner==='D' && exactScore && !exactPen){
+        scores[pname]=(scores[pname]||0)+1*mult; // right draw score, wrong pen
+      } else if(predWinner===actualWinner){
+        scores[pname]=(scores[pname]||0)+1*mult; // correct winner via pen
       }
     });
   });
@@ -744,7 +793,15 @@ async function submitResult(){
   const a=parseInt(document.getElementById('res-a').value);
   const btn=document.getElementById('btn-result');
   btn.disabled=true; btn.innerHTML='<span class="spinner"></span>';
-  state.results[mid]={h,a};
+  const result={h,a};
+  // capture penalty winner if draw
+  if(h===a){
+    const penH=document.getElementById('admin-pen-H');
+    const penA=document.getElementById('admin-pen-A');
+    if(penH&&penH.classList.contains('selected')) result.pen='H';
+    else if(penA&&penA.classList.contains('selected')) result.pen='A';
+  }
+  state.results[mid]=result;
   await saveStateToSheet();
   btn.disabled=false; btn.textContent='Save result';
   const msg=document.getElementById('result-msg');
@@ -786,7 +843,17 @@ async function saveCurrentTab(){
         const mid=`KO_${r.id}_${i+1}`;
         const h=document.getElementById(mid+'_h');
         const a=document.getElementById(mid+'_a');
-        if(h&&h.value!==''&&a&&a.value!=='') preds[mid]={h:parseInt(h.value),a:parseInt(a.value)};
+        if(h&&h.value!==''&&a&&a.value!==''){
+          const pred={h:parseInt(h.value),a:parseInt(a.value)};
+          // capture penalty pick if it's a draw
+          if(pred.h===pred.a){
+            const penH=document.getElementById(mid+'_pen_H');
+            const penA=document.getElementById(mid+'_pen_A');
+            if(penH&&penH.classList.contains('selected')) pred.pen='H';
+            else if(penA&&penA.classList.contains('selected')) pred.pen='A';
+          }
+          preds[mid]=pred;
+        }
       }
     });
   } else if(tabId==='champion'){
@@ -808,6 +875,25 @@ async function saveCurrentTab(){
 
 async function saveChampion(){ await saveCurrentTab(); }
 
+
+
+function toggleAdminPenalty(){
+  const h=parseInt(document.getElementById('res-h').value);
+  const a=parseInt(document.getElementById('res-a').value);
+  const row=document.getElementById('admin-pen-row');
+  if(!isNaN(h)&&!isNaN(a)&&h===a) row.style.display='flex';
+  else { row.style.display='none'; selectAdminPenalty(null); }
+}
+
+function selectAdminPenalty(team){
+  const penH=document.getElementById('admin-pen-H');
+  const penA=document.getElementById('admin-pen-A');
+  if(!penH||!penA) return;
+  penH.classList.remove('selected');
+  penA.classList.remove('selected');
+  if(team==='H') penH.classList.add('selected');
+  else if(team==='A') penA.classList.add('selected');
+}
 
 function approvePlayer(index){
   const p = state.pending[index];
