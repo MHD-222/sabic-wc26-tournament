@@ -205,7 +205,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <!-- LEADERBOARD TAB -->
     <div id="tab-leaderboard" class="tab-content">
       <p class="section-title" id="title-lb">Leaderboard</p>
-      <p class="section-sub">Live standings. Updates after every match result is entered.</p>
+      <p class="section-sub">Live standings. Auto-updates every 15 minutes on match days.</p>
       <div id="lb-container"></div>
     </div>
 
@@ -264,6 +264,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
 
       <div class="admin-block">
+        <h3>Score controls</h3>
+        <p style="font-size:12px;color:#939598;margin-bottom:10px">Scores auto-fetch every 15 minutes on match days (10:00–01:00 Riyadh time). Max 100 API requests/day.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <button class="btn btn-sm" onclick="manualRefresh()" id="btn-refresh" style="border-color:#0047BB;color:#0047BB">↻ Fetch latest scores</button>
+          <button class="btn btn-sm" onclick="checkAPIUsage()" id="btn-api-usage" style="border-color:#939598;color:#939598">Check API usage</button>
+        </div>
+        <div id="api-usage-display"></div>
+        <div id="refresh-status"></div>
+      </div>
+      <div class="admin-block">
         <h3>Google Sheet (your private data store)</h3>
         <p style="font-size:12px;color:#939598;margin-bottom:10px">Every prediction and result is saved here. Only accessible with your Google account.</p>
         <a href="https://docs.google.com/spreadsheets/d/1yzF14Kvqg5LE7JJaqZknOweDRYHBEM1YW208PsKjggs/edit" target="_blank" class="sheet-link">
@@ -298,7 +308,7 @@ const T = {
     title_groups: 'Group stage predictions',
     sub_groups: 'Predict the score of all 72 group stage matches. Must be submitted before the opening match kicks off.',
     title_ko: 'Knockout stage',
-    sub_ko: 'Each prediction locks 30 minutes before kickoff. Scores are based on the full match final score including extra time.',
+    sub_ko: 'Each prediction locks 30 minutes before kickoff. Scores are based on the full match final score including extra time and penalties.',
     title_champ: 'Champion pick',
     sub_champ: 'Pick the team you think wins the World Cup. Worth +10 bonus points. Locks before the opening match.',
     title_lb: 'Leaderboard',
@@ -392,6 +402,12 @@ function applyLangToMain(){
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycby1wRftH0r-H-gvdqS1TTxoorqlvvNznyHIHEEW97Pzx0b1WzySWAgNjxXIJCpnyMfs1A/exec';
 const SECRET = 'SABICWC26';
+const APISPORTS_KEY = '5cf35026185154c1862fa90cdd9ed000';
+const WC_LEAGUE = 1;
+const WC_SEASON = 2026;
+const RIYADH_OFFSET = 3; // UTC+3
+let lastAutoFetch = 0;
+let autoFetchInterval = null;
 
 async function loadStateFromSheet() {
   try {
@@ -451,6 +467,7 @@ function doLogin(){
   renderChampion();
   renderLeaderboard();
   if(currentUser.isAdmin) renderAdmin();
+  startAutoFetch();
 }
 
 
@@ -917,6 +934,186 @@ function rejectPlayer(index){
   state.pending.splice(index, 1);
   saveStateToSheet();
   renderAdmin();
+}
+
+
+async function fetchLatestScores() {
+  try {
+    // Only fetch between 10:00 and 01:00 Riyadh time (UTC+3)
+    const nowUTC = new Date();
+    const riyadhHour = (nowUTC.getUTCHours() + RIYADH_OFFSET) % 24;
+    if (riyadhHour < 10 && riyadhHour > 1) {
+      console.log('Outside match hours, skipping fetch');
+      return { skipped: true };
+    }
+
+    const url = `https://v3.football.api-sports.io/fixtures?league=${WC_LEAGUE}&season=${WC_SEASON}&status=FT-AET-PEN`;
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'x-apisports-key': APISPORTS_KEY
+      }
+    });
+    const data = await res.json();
+    if (!data.response || !data.response.length) return { updated: 0 };
+
+    let updated = 0;
+    data.response.forEach(fixture => {
+      const home = fixture.teams.home.name;
+      const away = fixture.teams.away.name;
+      const homeScore = fixture.goals.home;
+      const awayScore = fixture.goals.away;
+      const status = fixture.fixture.status.short; // FT, AET, PEN
+      const fixtureDate = new Date(fixture.fixture.date);
+
+      // Try to find matching app match ID
+      const matchId = findMatchId(home, away, fixtureDate);
+      if (!matchId) return;
+
+      // Build result object
+      const result = { h: homeScore, a: awayScore, auto: true };
+
+      // Handle penalties
+      if (status === 'PEN') {
+        const homePen = fixture.score.penalty.home;
+        const awayPen = fixture.score.penalty.away;
+        result.pen = homePen > awayPen ? 'H' : 'A';
+        // For penalty shootouts, regulation score is used (not penalty score)
+        result.h = fixture.score.fulltime.home;
+        result.a = fixture.score.fulltime.away;
+      }
+
+      // Only update if not already manually set or if auto
+      if (!state.results[matchId] || state.results[matchId].auto) {
+        state.results[matchId] = result;
+        updated++;
+      }
+    });
+
+    if (updated > 0) {
+      await saveStateToSheet();
+      renderLeaderboard();
+      renderGroups();
+      renderKnockout();
+      showAutoUpdateBadge(updated);
+    }
+
+    lastAutoFetch = Date.now();
+    return { updated };
+  } catch(e) {
+    console.warn('Score fetch failed:', e);
+    return { error: e.message };
+  }
+}
+
+function findMatchId(apiHome, apiAway, fixtureDate) {
+  // Normalize team names for matching
+  const normalize = name => name.toLowerCase()
+    .replace(/united states/i, 'united states')
+    .replace(/usa/i, 'united states')
+    .replace(/türkiye/i, 'turkey')
+    .replace(/turkiye/i, 'turkey')
+    .replace(/ivory coast/i, 'ivory coast')
+    .replace(/cote d.ivoire/i, 'ivory coast')
+    .replace(/cape verde/i, 'cape verde')
+    .replace(/cabo verde/i, 'cape verde')
+    .replace(/dr congo/i, 'dr congo')
+    .replace(/democratic republic of congo/i, 'dr congo')
+    .replace(/bosnia/i, 'bosnia and herzegovina')
+    .replace(/curacao/i, 'curacao')
+    .replace(/new zealand/i, 'new zealand')
+    .trim();
+
+  const nHome = normalize(apiHome);
+  const nAway = normalize(apiAway);
+
+  // Search group matches
+  for (const [g, teams] of Object.entries(GROUPS)) {
+    for (let i = 0; i < teams.length; i++) {
+      for (let j = i + 1; j < teams.length; j++) {
+        if (normalize(teams[i]) === nHome && normalize(teams[j]) === nAway) {
+          return `G${g}_${i}_${j}`;
+        }
+        if (normalize(teams[j]) === nHome && normalize(teams[i]) === nAway) {
+          return `G${g}_${i}_${j}`; // swap — store result with h/a flipped
+        }
+      }
+    }
+  }
+
+  // For knockout matches we can't match by team name since teams are TBD
+  // Store by fixture date + round detection
+  const matchDate = new Date(fixtureDate);
+  const june30 = new Date('2026-06-30');
+  const july2 = new Date('2026-07-02');
+  const july5 = new Date('2026-07-09');
+  const july11 = new Date('2026-07-11');
+  const july15 = new Date('2026-07-15');
+  const july19 = new Date('2026-07-19');
+
+  // We'll use the API fixture ID as a fallback key for knockout matches
+  return null; // knockout auto-matching handled separately
+}
+
+function showAutoUpdateBadge(count) {
+  const existing = document.getElementById('auto-update-badge');
+  if (existing) existing.remove();
+  const badge = document.createElement('div');
+  badge.id = 'auto-update-badge';
+  badge.style.cssText = 'position:fixed;top:16px;right:16px;background:#0047BB;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;z-index:999;box-shadow:0 2px 8px rgba(0,0,0,0.15)';
+  badge.textContent = `✓ ${count} score${count>1?'s':''} updated automatically`;
+  document.body.appendChild(badge);
+  setTimeout(() => badge.remove(), 4000);
+}
+
+function startAutoFetch() {
+  // Fetch on load
+  fetchLatestScores();
+  // Then every 30 minutes
+  autoFetchInterval = setInterval(() => {
+    fetchLatestScores();
+  }, 15 * 60 * 1000);
+}
+
+
+
+async function checkAPIUsage() {
+  const btn = document.getElementById('btn-api-usage');
+  const display = document.getElementById('api-usage-display');
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking...'; }
+  try {
+    const res = await fetch('https://v3.football.api-sports.io/status', {
+      headers: { 'x-apisports-key': APISPORTS_KEY }
+    });
+    const data = await res.json();
+    const req = data.response.requests;
+    const pct = Math.round((req.current / req.limit_day) * 100);
+    if (display) display.innerHTML = `<div class="alert alert-info">Used today: <strong>${req.current}</strong> / ${req.limit_day} requests (${pct}%)</div>`;
+  } catch(e) {
+    if (display) display.innerHTML = `<div class="alert alert-error">Could not reach API</div>`;
+  }
+  if (btn) { btn.disabled = false; btn.textContent = 'Check API usage'; }
+}
+
+async function manualRefresh() {
+  const btn = document.getElementById('btn-refresh');
+  const status = document.getElementById('refresh-status');
+  if (btn) { btn.disabled = true; btn.textContent = 'Fetching...'; }
+  const result = await fetchLatestScores();
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = '↻ Fetch latest scores';
+  }
+  if (status) {
+    if (result.error) {
+      status.innerHTML = `<div class="alert alert-error" style="margin-top:8px">Error: ${result.error}</div>`;
+    } else if (result.skipped) {
+      status.innerHTML = `<div class="alert alert-warn" style="margin-top:8px">Outside match hours (10:00–01:00 Riyadh). No fetch needed.</div>`;
+    } else {
+      status.innerHTML = `<div class="alert alert-success" style="margin-top:8px">${result.updated > 0 ? `✓ ${result.updated} score(s) updated from API.` : '✓ All scores already up to date.'}</div>`;
+    }
+    setTimeout(() => { if(status) status.innerHTML=''; }, 5000);
+  }
 }
 
 async function init(){
