@@ -620,20 +620,28 @@ function renderKnockout(){
       const mid=`KO_${round.id}_${i+1}`;
       const saved=userPreds[mid];
       const result=state.results[mid];
+      const isDraw = saved && saved.h!==undefined && saved.a!==undefined && parseInt(saved.h)===parseInt(saved.a);
       const card=document.createElement('div');
       card.className='match-card'+(saved?' has-prediction':'')+(result?' has-result':'');
       card.innerHTML=`
         <div class="match-meta">
           ${lang==='ar'?round.labelAr:round.label} · ${lang==='ar'?'مباراة':'Match'} ${i+1}
-          ${result?`<span class="badge badge-result">Result: ${result.h}–${result.a}</span>`:''}
+          ${result?`<span class="badge badge-result">Result: ${result.h}–${result.a}${result.pen?' (pen: '+result.pen+')':''}</span>`:''}
           ${saved&&!result?`<span class="badge badge-saved">${lang==='ar'?'محفوظ':'Saved'}</span>`:''}
         </div>
         <div class="match-row">
           <span class="team-name" style="color:#939598">${lang==='ar'?'لم يُحدد':'TBD'}</span>
-          <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="–" inputmode="numeric" ${result?'disabled':''} oninput="updateWinIndicator('${mid}')"/>
+          <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="–" inputmode="numeric" ${result?'disabled':''} oninput="updateWinIndicator('${mid}');togglePenaltyRow('${mid}')"/>
           <span class="vs">vs</span>
-          <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="–" inputmode="numeric" ${result?'disabled':''} oninput="updateWinIndicator('${mid}')"/>
+          <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="–" inputmode="numeric" ${result?'disabled':''} oninput="updateWinIndicator('${mid}');togglePenaltyRow('${mid}')"/>
           <span class="team-name right" style="color:#939598">${lang==='ar'?'لم يُحدد':'TBD'}</span>
+        </div>
+        <div class="penalty-row" id="${mid}_pen_row" style="display:${isDraw?'flex':'none'}">
+          <span class="penalty-label">🏆 ${lang==='ar'?'الفائز بركلات الترجيح:':'Penalty winner:'}</span>
+          <button class="penalty-btn${saved&&saved.pen==='H'?' selected':''}" id="${mid}_pen_H" onclick="selectPenalty('${mid}','H')" ${result?'disabled':''}>
+            ${lang==='ar'?'الفريق الأول':'Team A (left)'}</button>
+          <button class="penalty-btn${saved&&saved.pen==='A'?' selected':''}" id="${mid}_pen_A" onclick="selectPenalty('${mid}','A')" ${result?'disabled':''}>
+            ${lang==='ar'?'الفريق الثاني':'Team B (right)'}</button>
         </div>`;
       container.appendChild(card);
     }
