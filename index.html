@@ -114,6 +114,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="header">
     <h1>⚽ <span id="hdr-title">SABIC SC WC26 Predictions Tournament</span></h1>
     <p id="hdr-sub"></p>
+    <button id="btn-logout" onclick="doLogout()" style="display:none;margin-top:8px;padding:4px 14px;border:1px solid #C6C8CA;border-radius:20px;font-size:12px;cursor:pointer;background:#fff;color:#939598;font-family:inherit">Sign out</button>
   </div>
 
   <!-- LOGIN -->
@@ -457,9 +458,9 @@ const MATCH_SCHEDULE = {
 
   // GROUP L
   'GL_ENG_CRO': '2026-06-17T20:00:00Z',   // England vs Croatia
-  'GL_GHA_PAN': '2026-06-18T23:00:00Z',   // Ghana vs Panama
+  'GL_GHA_PAN': '2026-06-17T23:00:00Z',   // Ghana vs Panama (corrected)
   'GL_ENG_GHA': '2026-06-23T20:00:00Z',   // England vs Ghana
-  'GL_PAN_CRO': '2026-06-24T23:00:00Z',   // Panama vs Croatia  (was 01:00 on June 24 CEST)
+  'GL_PAN_CRO': '2026-06-23T23:00:00Z',   // Panama vs Croatia (corrected)
   'GL_PAN_ENG': '2026-06-27T21:00:00Z',   // Panama vs England
   'GL_CRO_GHA': '2026-06-27T21:00:00Z',   // Croatia vs Ghana
 
@@ -657,6 +658,18 @@ const TEAM_PAIR_TO_SCHEDULE = {};
   Object.assign(TEAM_PAIR_TO_SCHEDULE, groupTeamCodes);
 })();
 
+
+// Tournament-wide lock: champion pick & group predictions lock at the opening match kickoff.
+const OPENING_MATCH_KEY = 'GA_MEX_RSA';
+function isTournamentStarted() {
+  const kickoff = MATCH_SCHEDULE[OPENING_MATCH_KEY];
+  if (!kickoff) return false;
+  // Lock 5 minutes before opening kickoff, consistent with per-match locks
+  const lockTime = new Date(kickoff);
+  lockTime.setMinutes(lockTime.getMinutes() - 5);
+  return new Date() >= lockTime;
+}
+
 function getScheduleKeyForMatch(matchId, homeTeam, awayTeam) {
   if (matchId.startsWith('KO_')) return matchId;
   const key = homeTeam + '|' + awayTeam;
@@ -741,15 +754,88 @@ async function loadStateFromSheet() {
   }
 }
 
-async function saveStateToSheet() {
+async function loadRawState() {
+  // Fetch the latest state from the sheet without overwriting local state
+  const url = GAS_URL + '?action=load&secret=' + SECRET;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data && data.players) return data;
+  return null;
+}
+
+async function saveStateToSheet(opts) {
+  opts = opts || {};
   try {
-    const payload = encodeURIComponent(JSON.stringify(state));
-    const url = GAS_URL + '?action=save&secret=' + SECRET + '&data=' + payload;
-    const res = await fetch(url);
+    // MERGE: re-load latest state and merge in only what changed locally,
+    // so concurrent saves by other players don't get clobbered.
+    let merged = null;
+    try {
+      const latest = await loadRawState();
+      if (latest && latest.players) {
+        merged = latest;
+        if (opts.mergeScope === 'player' && currentUser) {
+          // Only this player's own prediction + champion pick are authoritative locally
+          merged.predictions = merged.predictions || {};
+          merged.champion_picks = merged.champion_picks || {};
+          if (state.predictions[currentUser.name]) {
+            merged.predictions[currentUser.name] = state.predictions[currentUser.name];
+          }
+          if (state.champion_picks[currentUser.name] !== undefined) {
+            merged.champion_picks[currentUser.name] = state.champion_picks[currentUser.name];
+          }
+          // Make sure this player exists in the merged player list
+          if (!merged.players[currentUser.name] && state.players[currentUser.name]) {
+            merged.players[currentUser.name] = state.players[currentUser.name];
+          }
+          // Adopt merged as the new local truth so the UI reflects others' data too
+          state = merged;
+        } else if (opts.mergeScope === 'admin') {
+          // Admin actions are authoritative for players/results/pending/champion,
+          // but preserve any predictions submitted by players in the meantime.
+          const localPlayerPreds = state.predictions || {};
+          const latestPreds = merged.predictions || {};
+          // Union: keep latest player predictions, local admin doesn't touch these
+          merged.predictions = Object.assign({}, latestPreds, localPlayerPreds);
+          // Admin-owned fields come from local state
+          merged.players = state.players;
+          merged.results = state.results;
+          merged.pending = state.pending;
+          merged.actual_champion = state.actual_champion;
+          state = merged;
+        } else if (opts.mergeScope === 'register') {
+          // A registering (not logged-in) user only appends to pending.
+          merged.pending = merged.pending || [];
+          // Append any new pending entries from local that aren't already there
+          (state.pending || []).forEach(p => {
+            if (!merged.pending.find(x => x.name.toLowerCase() === p.name.toLowerCase())) {
+              merged.pending.push(p);
+            }
+          });
+          state = merged;
+        } else {
+          // Default: trust local state entirely (e.g. first-ever save)
+          merged = state;
+        }
+      } else {
+        merged = state;
+      }
+    } catch(mergeErr) {
+      console.warn('Merge step failed, saving local state as-is', mergeErr);
+      merged = state;
+    }
+
+    // POST the data in the body — no URL length limit
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'action=save&secret=' + SECRET + '&data=' + encodeURIComponent(JSON.stringify(state))
+    });
     const data = await res.json();
     if (data.status !== 'saved') console.warn('Save response:', data);
+    return data;
   } catch(e) {
     console.warn('Save failed', e);
+    return { error: e.message };
   }
 }
 
@@ -764,6 +850,17 @@ function setDefaultState() {
   };
 }
 
+function doLogout(){
+  if (autoFetchInterval) clearInterval(autoFetchInterval);
+  if (countdownInterval) clearInterval(countdownInterval);
+  currentUser = null;
+  document.getElementById('screen-main').style.display='none';
+  document.getElementById('screen-login').style.display='block';
+  document.getElementById('btn-logout').style.display='none';
+  document.getElementById('inp-name').value='';
+  document.getElementById('inp-pin').value='';
+}
+
 function doLogin(){
   const name = document.getElementById('inp-name').value.trim();
   const pin = document.getElementById('inp-pin').value.trim();
@@ -775,6 +872,7 @@ function doLogin(){
   currentUser={name:match.name, pin:match.pin, isAdmin:match.name==='Admin'};
   document.getElementById('screen-login').style.display='none';
   document.getElementById('screen-main').style.display='block';
+  document.getElementById('btn-logout').style.display='inline-block';
   document.getElementById('hdr-sub').textContent='👤 '+match.name+(currentUser.isAdmin?' (Admin)':'');
   if(currentUser.isAdmin) document.getElementById('tab-btn-admin').style.display='';
   applyLangToMain();
@@ -883,7 +981,7 @@ function doRegister(){
   }
   if(!state.pending) state.pending=[];
   state.pending.push({name, pin, requestedAt: new Date().toISOString()});
-  saveStateToSheet();
+  saveStateToSheet({mergeScope:"register"});
   const btn = document.getElementById('btn-register');
   btn.disabled=true;
   suc.innerHTML = `<strong>Request sent!</strong><br>Your name: <strong>${name}</strong> · Your PIN: <strong>${pin}</strong><br><br>The admin will approve your entry shortly. Once approved, go back to Sign in and use these details.`;
@@ -908,6 +1006,15 @@ function renderGroups(){
   const container = document.getElementById('groups-container');
   container.innerHTML='';
   const userPreds = state.predictions[currentUser.name]||{};
+  // Progress counter
+  const groupPredCount = Object.keys(userPreds).filter(k=>k.startsWith('G')).length;
+  const subEl = document.getElementById('sub-groups');
+  if (subEl) {
+    const baseTxt = lang==='ar'
+      ? 'توقع نتيجة جميع مباريات دور المجموعات الـ72.'
+      : 'Predict the score of all 72 group stage matches.';
+    subEl.innerHTML = baseTxt + ` <strong style="color:#0047BB">${groupPredCount}/72 ${lang==='ar'?'تم توقعها':'predicted'}</strong>`;
+  }
   Object.entries(GROUPS).forEach(([g,teams])=>{
     const glabel = document.createElement('div');
     glabel.className='group-label';
@@ -930,7 +1037,7 @@ function renderGroups(){
             ${result?`<span class="badge badge-result">Result: ${result.h}–${result.a}</span>`:''}
             ${locked&&!result?`<span class="badge badge-locked">🔒 Locked</span>`:''}
             ${saved&&!result&&!locked?`<span class="badge badge-saved">${lang==='ar'?'محفوظ':'Saved'}</span>`:''}
-            ${!locked&&countdown?`<span style="font-size:11px;color:#939598;margin-left:auto">${countdown}</span>`:''}
+            ${!locked&&countdown?`<span class="countdown-label" data-countdown-key="${schedKey}" data-match-id="${mid}" style="font-size:11px;color:#939598;margin-left:auto">${countdown}</span>`:''}
           </div>
           <div class="match-row">
             <span class="team-name${locked&&!result?' losing':''}">${teams[i]}</span>
@@ -970,7 +1077,7 @@ function renderKnockout(){
           ${result?`<span class="badge badge-result">Result: ${result.h}–${result.a}${result.pen?' (pen: '+result.pen+')':''}</span>`:''}
           ${koLocked&&!result?`<span class="badge badge-locked">🔒 Locked</span>`:''}
           ${saved&&!result&&!koLocked?`<span class="badge badge-saved">${lang==='ar'?'محفوظ':'Saved'}</span>`:''}
-          ${!koLocked&&MATCH_SCHEDULE[mid]?`<span style="font-size:11px;color:#939598;margin-left:auto">${koCountdown}</span>`:''}
+          ${!koLocked&&MATCH_SCHEDULE[mid]?`<span class="countdown-label" data-countdown-key="${mid}" data-match-id="${mid}" style="font-size:11px;color:#939598;margin-left:auto">${koCountdown}</span>`:''}
         </div>
         <div class="match-row">
           <span class="team-name" style="color:#939598">${lang==='ar'?'لم يُحدد':'TBD'}</span>
@@ -996,11 +1103,15 @@ function renderChampion(){
   const grid=document.getElementById('champ-grid');
   const alert=document.getElementById('champ-alert');
   const existing=state.champion_picks[currentUser.name];
-  const locked=state.results['CHAMPION_LOCKED'];
+  const locked=state.results['CHAMPION_LOCKED'] || isTournamentStarted();
   grid.innerHTML='';
-  alert.innerHTML = existing
-    ? `<div class="alert alert-success">${lang==='ar'?'اختيارك الحالي':'Your current pick'}: <strong>${existing}</strong>. ${lang==='ar'?'يمكنك التغيير قبل انطلاق البطولة.':'You can change this before the tournament starts.'}</div>`
-    : `<div class="alert alert-info">${lang==='ar'?'لم تختر بعد — اختر فريقاً واحداً.':'You have not made a pick yet — select one team below.'}</div>`;
+  if (locked) {
+    alert.innerHTML = `<div class="alert alert-warn">🔒 ${lang==='ar'?'تم قفل اختيار البطل لأن البطولة بدأت.':'Champion pick is locked — the tournament has started.'} ${existing?(lang==='ar'?'اختيارك:':'Your pick:')+' <strong>'+existing+'</strong>':''}</div>`;
+  } else {
+    alert.innerHTML = existing
+      ? `<div class="alert alert-success">${lang==='ar'?'اختيارك الحالي':'Your current pick'}: <strong>${existing}</strong>. ${lang==='ar'?'يمكنك التغيير قبل انطلاق البطولة.':'You can change this before the tournament starts.'}</div>`
+      : `<div class="alert alert-info">${lang==='ar'?'لم تختر بعد — اختر فريقاً واحداً.':'You have not made a pick yet — select one team below.'}</div>`;
+  }
   ALL_TEAMS.forEach(team=>{
     const btn=document.createElement('button');
     btn.className='champ-btn'+(existing===team?' selected':'');
@@ -1009,6 +1120,8 @@ function renderChampion(){
     btn.onclick=()=>{document.querySelectorAll('.champ-btn').forEach(b=>b.classList.remove('selected'));btn.classList.add('selected');};
     grid.appendChild(btn);
   });
+  const champSaveBtn = document.getElementById('btn-save-champ');
+  if (champSaveBtn) champSaveBtn.style.display = locked ? 'none' : 'block';
 }
 
 function renderLeaderboard(){
@@ -1146,7 +1259,7 @@ function addPlayer(){
   if(!name||pin.length!==4){msg.innerHTML=`<span class="alert alert-error" style="display:inline-block">Enter a name and a 4-digit PIN.</span>`;return;}
   if(Object.values(state.players).find(p=>p.name.toLowerCase()===name.toLowerCase())){msg.innerHTML=`<span class="alert alert-error" style="display:inline-block">A player with that name already exists.</span>`;return;}
   state.players[name]={name,pin};
-  saveStateToSheet();
+  saveStateToSheet({mergeScope:"admin"});
   renderAdmin();
   renderLeaderboard();
   document.getElementById('new-name').value='';
@@ -1170,7 +1283,7 @@ async function submitResult(){
     else if(penA&&penA.classList.contains('selected')) result.pen='A';
   }
   state.results[mid]=result;
-  await saveStateToSheet();
+  await saveStateToSheet({mergeScope:"admin"});
   btn.disabled=false; btn.textContent='Save result';
   const msg=document.getElementById('result-msg');
   const matchLabel = document.getElementById('result-select').options[document.getElementById('result-select').selectedIndex].text;
@@ -1182,7 +1295,7 @@ async function submitResult(){
 async function setActualChampion(){
   const champ=document.getElementById('champ-winner-select').value;
   state.actual_champion=champ;
-  await saveStateToSheet();
+  await saveStateToSheet({mergeScope:"admin"});
   const msg=document.getElementById('champ-winner-msg');
   msg.innerHTML=`<div class="alert alert-success">✓ ${champ} set as tournament champion. +10 pts awarded.</div>`;
   renderLeaderboard();
@@ -1230,7 +1343,7 @@ async function saveCurrentTab(){
     if(sel) state.champion_picks[currentUser.name]=sel.textContent;
   }
   state.predictions[currentUser.name]=preds;
-  await saveStateToSheet();
+  await saveStateToSheet({mergeScope:"player"});
   btn.disabled=false;
   btn.textContent=t('saved');
   setTimeout(()=>{
@@ -1268,7 +1381,7 @@ function selectAdminPenalty(team){
 function resetResult(matchId) {
   if (!confirm(`Reset result for ${matchId}? This will recalculate all scores.`)) return;
   delete state.results[matchId];
-  saveStateToSheet();
+  saveStateToSheet({mergeScope:"admin"});
   renderLeaderboard();
   renderGroups();
   renderKnockout();
@@ -1312,7 +1425,7 @@ function saveEditPlayer() {
   state.players[newName] = { name: newName, pin: newPin };
   if (state.predictions[oldName]) { state.predictions[newName] = state.predictions[oldName]; delete state.predictions[oldName]; }
   if (state.champion_picks[oldName]) { state.champion_picks[newName] = state.champion_picks[oldName]; delete state.champion_picks[oldName]; }
-  saveStateToSheet();
+  saveStateToSheet({mergeScope:"admin"});
   cancelEditPlayer();
   renderAdmin();
   renderLeaderboard();
@@ -1326,7 +1439,7 @@ function removePlayer(name) {
   delete state.predictions[name];
   delete state.champion_picks[name];
   if (state.pending) state.pending = state.pending.filter(p => p.name !== name);
-  saveStateToSheet();
+  saveStateToSheet({mergeScope:"admin"});
   renderAdmin();
   renderLeaderboard();
   const msg = document.getElementById('add-player-msg');
@@ -1338,24 +1451,28 @@ function approvePlayer(index){
   if(!p) return;
   state.players[p.name] = {name: p.name, pin: p.pin};
   state.pending.splice(index, 1);
-  saveStateToSheet();
+  saveStateToSheet({mergeScope:"admin"});
   renderAdmin();
   renderLeaderboard();
 }
 
 function rejectPlayer(index){
   state.pending.splice(index, 1);
-  saveStateToSheet();
+  saveStateToSheet({mergeScope:"admin"});
   renderAdmin();
 }
 
 
 async function fetchLatestScores() {
   try {
+    // Only the admin's session performs API fetches (conserves the shared daily quota)
+    if (!currentUser || !currentUser.isAdmin) {
+      return { skipped: true, reason: 'not-admin' };
+    }
     // Only fetch between 10:00 and 01:00 Riyadh time (UTC+3)
     const nowUTC = new Date();
     const riyadhHour = (nowUTC.getUTCHours() + RIYADH_OFFSET) % 24;
-    if (riyadhHour < 10 && riyadhHour > 1) {
+    if (riyadhHour >= 1 && riyadhHour < 10) {
       console.log('Outside match hours, skipping fetch');
       return { skipped: true };
     }
@@ -1380,23 +1497,32 @@ async function fetchLatestScores() {
       const fixtureDate = new Date(fixture.fixture.date);
 
       // Try to find matching app match ID
-      const matchId = findMatchId(home, away, fixtureDate);
-      if (!matchId) return;
+      const match = findMatchId(home, away, fixtureDate);
+      if (!match) return;
+      const matchId = match.id;
+      const flip = match.flipped;
 
-      // Build result object
-      const result = { h: homeScore, a: awayScore, auto: true };
+      // Build result object — flip scores if API team order differs from app
+      let h = flip ? awayScore : homeScore;
+      let a = flip ? homeScore : awayScore;
+      const result = { h: h, a: a, auto: true };
 
       // Handle penalties
       if (status === 'PEN') {
         const homePen = fixture.score.penalty.home;
         const awayPen = fixture.score.penalty.away;
-        result.pen = homePen > awayPen ? 'H' : 'A';
-        // For penalty shootouts, regulation score is used (not penalty score)
-        result.h = fixture.score.fulltime.home;
-        result.a = fixture.score.fulltime.away;
+        // Penalty winner from API perspective
+        let apiPenWinner = homePen > awayPen ? 'H' : 'A';
+        // If flipped, the winner side flips too
+        result.pen = flip ? (apiPenWinner === 'H' ? 'A' : 'H') : apiPenWinner;
+        // Regulation score (full time) is used, also flipped if needed
+        const ftH = fixture.score.fulltime.home;
+        const ftA = fixture.score.fulltime.away;
+        result.h = flip ? ftA : ftH;
+        result.a = flip ? ftH : ftA;
       }
 
-      // Only update if not already manually set or if auto
+      // Only auto-update if not manually set (manual entries are never overwritten)
       if (!state.results[matchId] || state.results[matchId].auto) {
         state.results[matchId] = result;
         updated++;
@@ -1404,7 +1530,7 @@ async function fetchLatestScores() {
     });
 
     if (updated > 0) {
-      await saveStateToSheet();
+      await saveStateToSheet({mergeScope:"admin"});
       renderLeaderboard();
       renderGroups();
       renderKnockout();
@@ -1445,10 +1571,11 @@ function findMatchId(apiHome, apiAway, fixtureDate) {
     for (let i = 0; i < teams.length; i++) {
       for (let j = i + 1; j < teams.length; j++) {
         if (normalize(teams[i]) === nHome && normalize(teams[j]) === nAway) {
-          return `G${g}_${i}_${j}`;
+          return { id: `G${g}_${i}_${j}`, flipped: false };
         }
         if (normalize(teams[j]) === nHome && normalize(teams[i]) === nAway) {
-          return `G${g}_${i}_${j}`; // swap — store result with h/a flipped
+          // API lists teams in opposite order to our app — scores must be flipped
+          return { id: `G${g}_${i}_${j}`, flipped: true };
         }
       }
     }
@@ -1465,7 +1592,7 @@ function findMatchId(apiHome, apiAway, fixtureDate) {
   const july19 = new Date('2026-07-19');
 
   // We'll use the API fixture ID as a fallback key for knockout matches
-  return null; // knockout auto-matching handled separately
+  return null; // knockout auto-matching handled separately (TBD teams)
 }
 
 function showAutoUpdateBadge(count) {
@@ -1479,13 +1606,45 @@ function showAutoUpdateBadge(count) {
   setTimeout(() => badge.remove(), 4000);
 }
 
+let countdownInterval = null;
 function startAutoFetch() {
+  // Clear any existing intervals first (prevents stacking on repeated logins)
+  if (autoFetchInterval) clearInterval(autoFetchInterval);
+  if (countdownInterval) clearInterval(countdownInterval);
   // Fetch on load
   fetchLatestScores();
-  // Then every 30 minutes
+  // Then every 15 minutes
   autoFetchInterval = setInterval(() => {
     fetchLatestScores();
   }, 15 * 60 * 1000);
+  // Refresh ONLY the countdown text every 60 seconds (does not re-render inputs)
+  countdownInterval = setInterval(updateCountdownsInPlace, 60 * 1000);
+}
+
+function updateCountdownsInPlace() {
+  document.querySelectorAll('[data-countdown-key]').forEach(el => {
+    const key = el.getAttribute('data-countdown-key');
+    const ms = getTimeUntilLock(key);
+    if (ms === null) return;
+    if (ms <= 0) {
+      const mid = el.getAttribute('data-match-id');
+      if (mid) {
+        const h = document.getElementById(mid + '_h');
+        const a = document.getElementById(mid + '_a');
+        if (h && !h.disabled) h.disabled = true;
+        if (a && !a.disabled) a.disabled = true;
+        const penH = document.getElementById(mid + '_pen_H');
+        const penA = document.getElementById(mid + '_pen_A');
+        if (penH) penH.disabled = true;
+        if (penA) penA.disabled = true;
+      }
+      el.textContent = '🔒 Locked';
+      el.className = 'badge badge-locked';
+      el.removeAttribute('style');
+    } else {
+      el.textContent = formatCountdown(ms);
+    }
+  });
 }
 
 
