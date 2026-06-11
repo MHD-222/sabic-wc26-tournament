@@ -123,9 +123,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <button class="lang-btn active" onclick="setLang('en')" id="lang-en">English</button>
       <button class="lang-btn" onclick="setLang('ar')" id="lang-ar">العربية</button>
     </div>
-    <div style="display:flex;gap:4px;background:#fff;border:1px solid #C6C8CA;border-radius:10px;padding:4px;margin-bottom:1rem">
-      <button id="mode-signin-btn" onclick="switchMode('signin')" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;background:#0047BB;color:#fff;font-family:inherit">Sign in</button>
-      <button id="mode-register-btn" onclick="switchMode('register')" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;background:transparent;color:#404D4D;font-family:inherit">Join the tournament</button>
+    <div class="nav" id="public-nav" style="margin-bottom:1rem">
+      <button class="nav-btn active" id="pub-btn-signin" onclick="switchMode('signin')" data-en="Sign in" data-ar="دخول">Sign in</button>
+      <button class="nav-btn" id="pub-btn-register" onclick="switchMode('register')" data-en="Register" data-ar="تسجيل">Register</button>
+      <button class="nav-btn" id="pub-btn-leaderboard" onclick="switchMode('leaderboard')" data-en="Leaderboard" data-ar="الترتيب">Leaderboard</button>
+      <button class="nav-btn" id="pub-btn-rules" onclick="switchMode('rules')" data-en="Rules" data-ar="القواعد">Rules</button>
     </div>
     <div class="card" id="panel-signin">
       <div class="field">
@@ -143,26 +145,38 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <p style="font-size:12px;color:#939598;margin-top:12px;text-align:center" id="lbl-contact">Not registered yet? Click "Join the tournament" above.</p>
     </div>
     <div class="card" id="panel-register" style="display:none">
-      <div class="alert alert-info" style="margin-bottom:1rem">
-        Choose your display name and a 4-digit PIN. Your request will be sent to the admin. You can sign in once approved.
+      <div class="alert alert-info" style="margin-bottom:1rem" id="reg-info-text">
+        Choose your display name and a 4-digit PIN. You'll be signed in straight away. Keep your PIN safe — you'll use it to sign in next time.
       </div>
       <div class="field">
-        <label>Your name</label>
+        <label id="lbl-reg-name">Your name</label>
         <input type="text" id="reg-name" placeholder="e.g. Ahmed" autocomplete="off"/>
       </div>
       <div class="field">
-        <label>Choose a PIN (4 digits)</label>
+        <label id="lbl-reg-pin">Choose a PIN (4 digits)</label>
         <input type="password" id="reg-pin" maxlength="4" placeholder="••••" inputmode="numeric"/>
       </div>
       <div class="field">
-        <label>Confirm PIN</label>
+        <label id="lbl-reg-pin2">Confirm PIN</label>
         <input type="password" id="reg-pin2" maxlength="4" placeholder="••••" inputmode="numeric"/>
       </div>
       <div id="register-err" class="alert alert-error" style="display:none"></div>
       <div id="register-success" class="alert alert-success" style="display:none"></div>
       <button class="btn btn-primary" id="btn-register" onclick="doRegister()">
-        <span id="btn-register-text">Send request to admin</span>
+        <span id="btn-register-text">Register & start predicting</span>
       </button>
+    </div>
+
+    <div id="panel-leaderboard" style="display:none">
+      <p class="section-title" id="pub-lb-title">Leaderboard</p>
+      <p class="section-sub" id="pub-lb-sub">Live standings. Updated as match results come in.</p>
+      <div id="pub-lb-container"></div>
+    </div>
+
+    <div id="panel-rules" style="display:none">
+      <p class="section-title" id="pub-rules-title">Tournament rules & scoring</p>
+      <p class="section-sub" id="pub-rules-sub">How the tournament works and how points are calculated.</p>
+      <div id="pub-rules-container"></div>
     </div>
   </div>
 
@@ -173,6 +187,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <button class="nav-btn" onclick="showTab('knockout')" id="tab-btn-knockout" data-en="Knockout" data-ar="إقصائي">Knockout</button>
       <button class="nav-btn" onclick="showTab('champion')" id="tab-btn-champion" data-en="Champion" data-ar="البطل">Champion</button>
       <button class="nav-btn" onclick="showTab('leaderboard')" id="tab-btn-leaderboard" data-en="Leaderboard" data-ar="الترتيب">Leaderboard</button>
+      <button class="nav-btn" onclick="showTab('rules')" id="tab-btn-rules" data-en="Rules" data-ar="القواعد">Rules</button>
       <button class="nav-btn" onclick="showTab('admin')" id="tab-btn-admin" style="display:none" data-en="Admin" data-ar="الإدارة">Admin</button>
     </div>
 
@@ -206,8 +221,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <!-- LEADERBOARD TAB -->
     <div id="tab-leaderboard" class="tab-content">
       <p class="section-title" id="title-lb">Leaderboard</p>
-      <p class="section-sub">Live standings. Auto-updates every 15 minutes on match days.</p>
+      <p class="section-sub">Live standings. Updated as the admin enters match results.</p>
       <div id="lb-container"></div>
+    </div>
+
+    <!-- RULES TAB -->
+    <div id="tab-rules" class="tab-content">
+      <p class="section-title" id="title-rules">Tournament rules &amp; scoring</p>
+      <p class="section-sub" id="sub-rules">How the tournament works and how points are calculated.</p>
+      <div id="rules-container"></div>
     </div>
 
     <!-- ADMIN TAB -->
@@ -215,12 +237,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <p class="section-title">Admin panel</p>
       <p class="section-sub">Manage players and enter match results. Only visible to you.</p>
 
-
-      <div class="admin-block" id="pending-block">
-        <h3>Pending registration requests <span id="pending-count" style="background:#FFF3E0;color:#7A3F00;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:6px"></span></h3>
-        <p style="font-size:12px;color:#939598;margin-bottom:10px">Players who have requested to join. Review and approve or reject each one.</p>
-        <div id="pending-list"></div>
-      </div>
 
       <div class="admin-block">
         <h3>Players & PINs</h3>
@@ -703,22 +719,61 @@ function setLang(l) {
   document.getElementById('lang-en').classList.toggle('active', l==='en');
   document.getElementById('lang-ar').classList.toggle('active', l==='ar');
   document.getElementById('hdr-title').textContent = t('hdr');
-  document.getElementById('lbl-name').textContent = t('name');
-  document.getElementById('lbl-pin').textContent = t('pin');
-  document.getElementById('btn-login-text').textContent = t('signin');
-  document.getElementById('lbl-contact').textContent = t('contact');
+  // Update all nav button labels (public + main) from their data-en / data-ar
   document.querySelectorAll('.nav-btn[data-'+l+']').forEach(b=>{b.textContent=b.dataset[l]});
-  if(document.getElementById('screen-main').style.display!=='none') applyLangToMain();
+  // Apply translations everywhere (works on both the public and the logged-in screen)
+  applyLangToMain();
 }
 
 function applyLangToMain(){
-  document.getElementById('title-groups').textContent = t('title_groups');
-  document.getElementById('sub-groups').textContent = t('sub_groups');
-  document.getElementById('title-knockout').textContent = t('title_ko');
-  document.getElementById('sub-knockout').textContent = t('sub_ko');
-  document.getElementById('title-champion').textContent = t('title_champ');
-  document.getElementById('sub-champion').textContent = t('sub_champ');
-  document.getElementById('title-lb').textContent = t('title_lb');
+  const set = (id, en, ar) => { const el=document.getElementById(id); if(el) el.textContent = (lang==='ar'?ar:en); };
+  // Main tab titles & subs
+  set('title-groups','Group stage predictions','توقعات دور المجموعات');
+  set('title-knockout','Knockout stage','الأدوار الإقصائية');
+  set('title-champion','Champion pick','اختيار البطل');
+  set('title-lb','Leaderboard','ترتيب اللاعبين');
+  set('title-rules','Tournament rules & scoring','قواعد البطولة واحتساب النقاط');
+  set('sub-rules','How the tournament works and how points are calculated.','كيف تعمل البطولة وكيف تُحتسب النقاط.');
+  set('sub-knockout','Each prediction locks 5 minutes before kickoff. Scores are based on the full match final score including extra time.','تُقفل كل توقعات قبل 5 دقائق من انطلاق المباراة. تُحتسب النتائج على أساس النتيجة النهائية شاملة الوقت الإضافي.');
+  set('sub-champion','Pick the team you think wins the World Cup. Worth +10 bonus points. Locks before the opening match.','اختر الفريق الذي تعتقد أنه سيفوز بكأس العالم. يساوي +10 نقاط إضافية. يُقفل قبل المباراة الافتتاحية.');
+  // sub-groups is set with a progress counter inside renderGroups; handled there.
+
+  // Public panel titles & subs
+  set('pub-lb-title','Leaderboard','ترتيب اللاعبين');
+  set('pub-lb-sub','Live standings. Updated as match results come in.','الترتيب المباشر. يُحدَّث عند ورود نتائج المباريات.');
+  set('pub-rules-title','Tournament rules & scoring','قواعد البطولة واحتساب النقاط');
+  set('pub-rules-sub','How the tournament works and how points are calculated.','كيف تعمل البطولة وكيف تُحتسب النقاط.');
+
+  // Login / registration labels
+  set('lbl-name','Your name','اسمك');
+  set('lbl-pin','Your PIN (4 digits)','رمزك السري (4 أرقام)');
+  set('btn-login-text','Sign in','دخول');
+  set('lbl-contact','Not registered yet? Tap "Register" above.','لم تسجّل بعد؟ اضغط "تسجيل" بالأعلى.');
+  set('lbl-reg-name','Your name','اسمك');
+  set('lbl-reg-pin','Choose a PIN (4 digits)','اختر رمزاً سرياً (4 أرقام)');
+  set('lbl-reg-pin2','Confirm PIN','تأكيد الرمز السري');
+  set('btn-register-text','Register & start predicting','سجّل وابدأ التوقع');
+  set('reg-info-text',"Choose your display name and a 4-digit PIN. You'll be signed in straight away. Keep your PIN safe — you'll use it to sign in next time.",'اختر اسمك ورمزاً سرياً من 4 أرقام. سيتم تسجيل دخولك مباشرة. احتفظ برمزك السري — ستستخدمه لتسجيل الدخول لاحقاً.');
+
+  // Save buttons reflect current tab
+  const activeTab = document.querySelector('.tab-content.active');
+  if(activeTab){
+    const id = activeTab.id.replace('tab-','');
+    const map = {groups:t('save_groups'), knockout:t('save_ko'), champion:t('save_champ')};
+    if(map[id]){ const bt=document.getElementById('btn-save-text'); if(bt) bt.textContent=map[id]; }
+  }
+
+  // Re-render dynamic content so embedded labels switch language
+  if(currentUser){
+    try{ renderGroups(); }catch(e){}
+    try{ renderKnockout(); }catch(e){}
+    try{ renderChampion(); }catch(e){}
+    try{ renderLeaderboard(); }catch(e){}
+    try{ renderRules(); }catch(e){}
+  } else {
+    try{ renderLeaderboard(); }catch(e){}
+    try{ renderRules(); }catch(e){}
+  }
 }
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycby1wRftH0r-H-gvdqS1TTxoorqlvvNznyHIHEEW97Pzx0b1WzySWAgNjxXIJCpnyMfs1A/exec';
@@ -800,13 +855,10 @@ async function saveStateToSheet(opts) {
           merged.apiMeta = state.apiMeta || merged.apiMeta || {};
           state = merged;
         } else if (opts.mergeScope === 'register') {
-          // A registering (not logged-in) user only appends to pending.
-          merged.pending = merged.pending || [];
-          // Append any new pending entries from local that aren't already there
-          (state.pending || []).forEach(p => {
-            if (!merged.pending.find(x => x.name.toLowerCase() === p.name.toLowerCase())) {
-              merged.pending.push(p);
-            }
+          // Auto-approved registration: merge in any new players from local.
+          merged.players = merged.players || {};
+          Object.values(state.players || {}).forEach(p => {
+            if (!merged.players[p.name]) merged.players[p.name] = p;
           });
           state = merged;
         } else {
@@ -880,6 +932,7 @@ function doLogin(){
   renderKnockout();
   renderChampion();
   renderLeaderboard();
+  renderRules();
   if(currentUser.isAdmin) renderAdmin();
   startAutoFetch();
 }
@@ -948,44 +1001,48 @@ function selectPenalty(matchId, team) {
 }
 
 function switchMode(mode){
-  const signinBtn = document.getElementById('mode-signin-btn');
-  const registerBtn = document.getElementById('mode-register-btn');
-  const signinPanel = document.getElementById('panel-signin');
-  const registerPanel = document.getElementById('panel-register');
-  if(mode==='signin'){
-    signinBtn.style.background='#0047BB'; signinBtn.style.color='#fff';
-    registerBtn.style.background='transparent'; registerBtn.style.color='#404D4D';
-    signinPanel.style.display='block'; registerPanel.style.display='none';
-  } else {
-    registerBtn.style.background='#0047BB'; registerBtn.style.color='#fff';
-    signinBtn.style.background='transparent'; signinBtn.style.color='#404D4D';
-    signinPanel.style.display='none'; registerPanel.style.display='block';
-  }
+  const panels = {
+    signin: 'panel-signin',
+    register: 'panel-register',
+    leaderboard: 'panel-leaderboard',
+    rules: 'panel-rules'
+  };
+  // Toggle nav button active states
+  ['signin','register','leaderboard','rules'].forEach(m=>{
+    const btn = document.getElementById('pub-btn-'+m);
+    if(btn) btn.classList.toggle('active', m===mode);
+    const panel = document.getElementById(panels[m]);
+    if(panel) panel.style.display = (m===mode)?'block':'none';
+  });
+  // Render content for the public views
+  if(mode==='leaderboard') renderLeaderboard();
+  if(mode==='rules') renderRules();
 }
 
-function doRegister(){
+async function doRegister(){
   const name = document.getElementById('reg-name').value.trim();
   const pin = document.getElementById('reg-pin').value.trim();
   const pin2 = document.getElementById('reg-pin2').value.trim();
   const err = document.getElementById('register-err');
   const suc = document.getElementById('register-success');
   err.style.display='none'; suc.style.display='none';
-  if(!name){ err.textContent='Please enter your name.'; err.style.display='block'; return; }
-  if(pin.length!==4){ err.textContent='PIN must be exactly 4 digits.'; err.style.display='block'; return; }
-  if(pin!==pin2){ err.textContent='PINs do not match. Please try again.'; err.style.display='block'; return; }
+  if(!name){ err.textContent = lang==='ar'?'يرجى إدخال اسمك.':'Please enter your name.'; err.style.display='block'; return; }
+  if(name.toLowerCase()==='admin'){ err.textContent = lang==='ar'?'هذا الاسم محجوز.':'That name is reserved.'; err.style.display='block'; return; }
+  if(pin.length!==4){ err.textContent = lang==='ar'?'يجب أن يكون الرمز 4 أرقام.':'PIN must be exactly 4 digits.'; err.style.display='block'; return; }
+  if(pin!==pin2){ err.textContent = lang==='ar'?'الرمزان غير متطابقين.':'PINs do not match. Please try again.'; err.style.display='block'; return; }
   if(Object.values(state.players).find(p=>p.name.toLowerCase()===name.toLowerCase())){
-    err.textContent='That name is already taken. Choose a different one.'; err.style.display='block'; return;
+    err.textContent = lang==='ar'?'هذا الاسم مستخدم بالفعل. اختر اسماً آخر.':'That name is already taken. Choose a different one.'; err.style.display='block'; return;
   }
-  if(state.pending && state.pending.find(p=>p.name.toLowerCase()===name.toLowerCase())){
-    err.textContent='A request with that name is already pending admin approval.'; err.style.display='block'; return;
-  }
-  if(!state.pending) state.pending=[];
-  state.pending.push({name, pin, requestedAt: new Date().toISOString()});
-  saveStateToSheet({mergeScope:"register"});
   const btn = document.getElementById('btn-register');
-  btn.disabled=true;
-  suc.innerHTML = `<strong>Request sent!</strong><br>Your name: <strong>${name}</strong> · Your PIN: <strong>${pin}</strong><br><br>The admin will approve your entry shortly. Once approved, go back to Sign in and use these details.`;
-  suc.style.display='block';
+  btn.disabled=true; btn.innerHTML='<span class="spinner"></span>';
+  // Auto-approve: add the player immediately and save
+  state.players[name] = { name, pin };
+  await saveStateToSheet({mergeScope:"register"});
+  btn.disabled=false; btn.innerHTML='<span id="btn-register-text">Send</span>';
+  // Log the new player straight in
+  document.getElementById('inp-name').value = name;
+  document.getElementById('inp-pin').value = pin;
+  doLogin();
 }
 
 
@@ -999,6 +1056,7 @@ function showTab(tab){
   const saveTextMap = {groups:t('save_groups'), knockout:t('save_ko'), champion:t('save_champ')};
   if(saveTextMap[tab]) document.getElementById('btn-save-text').textContent = saveTextMap[tab];
   if(tab==='leaderboard') renderLeaderboard();
+  if(tab==='rules') renderRules();
   if(tab==='admin') renderAdmin();
 }
 
@@ -1060,16 +1118,16 @@ function renderGroups(){
     card.className='match-card'+(saved&&!locked?' has-prediction':'')+(result?' has-result':'')+(locked&&!result?' has-result':'');
     card.innerHTML=`
       <div class="match-meta">
-        Group ${g}${koTime?' · '+koTime:''}
-        ${result?`<span class="badge badge-result">Result: ${result.h}–${result.a}</span>`:''}
-        ${locked&&!result?`<span class="badge badge-locked">🔒 Locked</span>`:''}
+        ${lang==='ar'?'المجموعة ':'Group '}${g}${koTime?' · '+koTime:''}
+        ${result?`<span class="badge badge-result">${lang==='ar'?'النتيجة':'Result'}: ${result.h}–${result.a}</span>`:''}
+        ${locked&&!result?`<span class="badge badge-locked">🔒 ${lang==='ar'?'مُقفل':'Locked'}</span>`:''}
         ${saved&&!result&&!locked?`<span class="badge badge-saved">${lang==='ar'?'محفوظ':'Saved'}</span>`:''}
         ${!locked&&countdown?`<span class="countdown-label" data-countdown-key="${schedKey}" data-match-id="${mid}" style="font-size:11px;color:#939598;margin-left:auto">${countdown}</span>`:''}
       </div>
       <div class="match-row">
         <span class="team-name${locked&&!result?' losing':''}" style="display:flex;align-items:center;gap:5px">${logoImg(teams[i],18)} ${teams[i]}</span>
         <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="–" inputmode="numeric" ${locked?'disabled':''} oninput="updateWinIndicator('${mid}');togglePenaltyRow('${mid}')"/>
-        <span class="vs">vs</span>
+        <span class="vs">${lang==='ar'?'ضد':'vs'}</span>
         <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="–" inputmode="numeric" ${locked?'disabled':''} oninput="updateWinIndicator('${mid}');togglePenaltyRow('${mid}')"/>
         <span class="team-name right${locked&&!result?' losing':''}" style="display:flex;align-items:center;gap:5px;justify-content:flex-end">${teams[j]} ${logoImg(teams[j],18)}</span>
       </div>`;
@@ -1099,15 +1157,15 @@ function renderKnockout(){
       card.innerHTML=`
         <div class="match-meta">
           ${lang==='ar'?round.labelAr:round.label} · ${lang==='ar'?'مباراة':'Match'} ${i+1}
-          ${result?`<span class="badge badge-result">Result: ${result.h}–${result.a}${result.pen?' (pen: '+result.pen+')':''}</span>`:''}
-          ${koLocked&&!result?`<span class="badge badge-locked">🔒 Locked</span>`:''}
+          ${result?`<span class="badge badge-result">${lang==='ar'?'النتيجة':'Result'}: ${result.h}–${result.a}${result.pen?' (pen: '+result.pen+')':''}</span>`:''}
+          ${koLocked&&!result?`<span class="badge badge-locked">🔒 ${lang==='ar'?'مُقفل':'Locked'}</span>`:''}
           ${saved&&!result&&!koLocked?`<span class="badge badge-saved">${lang==='ar'?'محفوظ':'Saved'}</span>`:''}
           ${!koLocked&&MATCH_SCHEDULE[mid]?`<span class="countdown-label" data-countdown-key="${mid}" data-match-id="${mid}" style="font-size:11px;color:#939598;margin-left:auto">${koCountdown}</span>`:''}
         </div>
         <div class="match-row">
           <span class="team-name" style="color:#939598">${lang==='ar'?'لم يُحدد':'TBD'}</span>
           <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="–" inputmode="numeric" ${koLocked?'disabled':''} oninput="updateWinIndicator('${mid}');togglePenaltyRow('${mid}')"/>
-          <span class="vs">vs</span>
+          <span class="vs">${lang==='ar'?'ضد':'vs'}</span>
           <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="–" inputmode="numeric" ${koLocked?'disabled':''} oninput="updateWinIndicator('${mid}');togglePenaltyRow('${mid}')"/>
           <span class="team-name right" style="color:#939598">${lang==='ar'?'لم يُحدد':'TBD'}</span>
         </div>
@@ -1177,10 +1235,114 @@ function logoImg(teamName, size) {
   return `<img src="${url}" alt="" style="width:${s}px;height:${s}px;object-fit:contain;vertical-align:middle" onerror="this.style.display='none'"/>`;
 }
 
+function renderRules(){
+  const onPublic = document.getElementById('screen-login') && document.getElementById('screen-login').style.display !== 'none';
+  const c = document.getElementById(onPublic ? 'pub-rules-container' : 'rules-container') || document.getElementById('rules-container');
+  if(!c) return;
+  const en = `
+    <div class="match-card" style="padding:16px">
+      <h3 style="color:#041E42;font-size:15px;margin-bottom:8px">📋 How it works</h3>
+      <p style="font-size:13px;color:#404D4D;line-height:1.6">Predict the scoreline of every match in the tournament — all 72 group stage matches plus every knockout match. You also pick one team to win the whole tournament. The more accurate your predictions, the more points you earn. Highest total points at the end wins.</p>
+    </div>
+
+    <div class="match-card" style="padding:16px">
+      <h3 style="color:#041E42;font-size:15px;margin-bottom:8px">⚽ Group stage scoring</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr style="border-bottom:0.5px solid #E6E7E8"><td style="padding:6px 0;color:#404D4D">Exact score correct</td><td style="text-align:right;font-weight:700;color:#0047BB">3 pts</td></tr>
+        <tr style="border-bottom:0.5px solid #E6E7E8"><td style="padding:6px 0;color:#404D4D">Correct result only (right winner or draw, wrong score)</td><td style="text-align:right;font-weight:700;color:#0047BB">1 pt</td></tr>
+        <tr><td style="padding:6px 0;color:#404D4D">Wrong result</td><td style="text-align:right;font-weight:700;color:#939598">0 pts</td></tr>
+      </table>
+    </div>
+
+    <div class="match-card" style="padding:16px">
+      <h3 style="color:#041E42;font-size:15px;margin-bottom:8px">⚔️ Knockout stage scoring</h3>
+      <p style="font-size:13px;color:#404D4D;line-height:1.6;margin-bottom:8px">Scores are based on the full match final score, including extra time. Point values increase in the later rounds:</p>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr style="border-bottom:0.5px solid #E6E7E8"><td style="padding:6px 0;color:#404D4D">Round of 32 &amp; Round of 16</td><td style="text-align:right;font-weight:700;color:#0047BB">×1</td></tr>
+        <tr style="border-bottom:0.5px solid #E6E7E8"><td style="padding:6px 0;color:#404D4D">Quarter-finals</td><td style="text-align:right;font-weight:700;color:#FFA300">×2</td></tr>
+        <tr><td style="padding:6px 0;color:#404D4D">Semi-finals &amp; Final</td><td style="text-align:right;font-weight:700;color:#FFA300">×3</td></tr>
+      </table>
+      <p style="font-size:12px;color:#939598;line-height:1.6;margin-top:8px">So an exact score in the Final is worth 3 × 3 = 9 points. The base points are the same as the group stage: 3 for an exact score, 1 for the correct result, multiplied by the round factor.</p>
+    </div>
+
+    <div class="match-card" style="padding:16px">
+      <h3 style="color:#041E42;font-size:15px;margin-bottom:8px">🥅 Penalties (knockout draws)</h3>
+      <p style="font-size:13px;color:#404D4D;line-height:1.6">If you predict a draw in a knockout match, you also pick who wins the penalty shootout. The guiding principle: <strong>correctly picking the team that advances always earns at least 1 point</strong>, however the match ends.</p>
+      <ul style="font-size:13px;color:#404D4D;line-height:1.7;margin:8px 0 0 18px">
+        <li>Exact score + correct penalty winner → full points</li>
+        <li>Correct draw score but wrong penalty winner → 1 pt</li>
+        <li>Correct winning team (any scoreline) → at least 1 pt</li>
+        <li>Wrong team advances → 0 pts</li>
+      </ul>
+    </div>
+
+    <div class="match-card" style="padding:16px">
+      <h3 style="color:#041E42;font-size:15px;margin-bottom:8px">🏆 Champion pick</h3>
+      <p style="font-size:13px;color:#404D4D;line-height:1.6">Pick the team you think will win the World Cup. If you're right, you earn a <strong style="color:#0047BB">+10 point bonus</strong>. This pick locks when the tournament begins and can't be changed afterwards.</p>
+    </div>
+
+    <div class="match-card" style="padding:16px">
+      <h3 style="color:#041E42;font-size:15px;margin-bottom:8px">🔒 Prediction deadlines</h3>
+      <p style="font-size:13px;color:#404D4D;line-height:1.6">Each match locks <strong>5 minutes before kickoff</strong> — after that you can't add or change your prediction for that match. A live countdown on every match card shows the time remaining. All times are shown in Riyadh time.</p>
+    </div>
+  `;
+
+  const ar = `
+    <div class="match-card" style="padding:16px">
+      <h3 style="color:#041E42;font-size:15px;margin-bottom:8px">📋 كيف تعمل البطولة</h3>
+      <p style="font-size:13px;color:#404D4D;line-height:1.8">توقّع نتيجة كل مباراة في البطولة — جميع مباريات دور المجموعات الـ72 بالإضافة إلى كل مباريات الأدوار الإقصائية. كما تختار فريقاً واحداً للفوز بالبطولة بأكملها. كلما زادت دقة توقعاتك، زادت نقاطك. صاحب أعلى مجموع نقاط في النهاية هو الفائز.</p>
+    </div>
+
+    <div class="match-card" style="padding:16px">
+      <h3 style="color:#041E42;font-size:15px;margin-bottom:8px">⚽ نقاط دور المجموعات</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr style="border-bottom:0.5px solid #E6E7E8"><td style="padding:6px 0;color:#404D4D">النتيجة الصحيحة بالضبط</td><td style="text-align:left;font-weight:700;color:#0047BB">3 نقاط</td></tr>
+        <tr style="border-bottom:0.5px solid #E6E7E8"><td style="padding:6px 0;color:#404D4D">النتيجة الصحيحة فقط (الفائز أو التعادل صحيح، النتيجة خاطئة)</td><td style="text-align:left;font-weight:700;color:#0047BB">نقطة 1</td></tr>
+        <tr><td style="padding:6px 0;color:#404D4D">نتيجة خاطئة</td><td style="text-align:left;font-weight:700;color:#939598">0 نقطة</td></tr>
+      </table>
+    </div>
+
+    <div class="match-card" style="padding:16px">
+      <h3 style="color:#041E42;font-size:15px;margin-bottom:8px">⚔️ نقاط الأدوار الإقصائية</h3>
+      <p style="font-size:13px;color:#404D4D;line-height:1.8;margin-bottom:8px">تُحتسب النتائج على أساس النتيجة النهائية للمباراة شاملة الوقت الإضافي. تزداد قيمة النقاط في الأدوار المتأخرة:</p>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr style="border-bottom:0.5px solid #E6E7E8"><td style="padding:6px 0;color:#404D4D">دور الـ32 ودور الـ16</td><td style="text-align:left;font-weight:700;color:#0047BB">×1</td></tr>
+        <tr style="border-bottom:0.5px solid #E6E7E8"><td style="padding:6px 0;color:#404D4D">ربع النهائي</td><td style="text-align:left;font-weight:700;color:#FFA300">×2</td></tr>
+        <tr><td style="padding:6px 0;color:#404D4D">نصف النهائي والنهائي</td><td style="text-align:left;font-weight:700;color:#FFA300">×3</td></tr>
+      </table>
+      <p style="font-size:12px;color:#939598;line-height:1.8;margin-top:8px">إذاً النتيجة الصحيحة بالضبط في النهائي تساوي 3 × 3 = 9 نقاط. النقاط الأساسية مماثلة لدور المجموعات: 3 للنتيجة الصحيحة بالضبط، 1 للنتيجة الصحيحة، مضروبة في معامل الدور.</p>
+    </div>
+
+    <div class="match-card" style="padding:16px">
+      <h3 style="color:#041E42;font-size:15px;margin-bottom:8px">🥅 ركلات الترجيح (تعادل الأدوار الإقصائية)</h3>
+      <p style="font-size:13px;color:#404D4D;line-height:1.8">إذا توقعت التعادل في مباراة إقصائية، فعليك أيضاً اختيار الفائز بركلات الترجيح. المبدأ الأساسي: <strong>اختيار الفريق المتأهل بشكل صحيح يمنحك نقطة واحدة على الأقل دائماً</strong>، بغض النظر عن كيفية انتهاء المباراة.</p>
+      <ul style="font-size:13px;color:#404D4D;line-height:1.9;margin:8px 18px 0 0;padding-right:18px">
+        <li>النتيجة الصحيحة + الفائز الصحيح بالركلات ← النقاط كاملة</li>
+        <li>نتيجة التعادل صحيحة لكن الفائز بالركلات خاطئ ← نقطة 1</li>
+        <li>الفريق الفائز الصحيح (أي نتيجة) ← نقطة واحدة على الأقل</li>
+        <li>تأهل الفريق الخاطئ ← 0 نقطة</li>
+      </ul>
+    </div>
+
+    <div class="match-card" style="padding:16px">
+      <h3 style="color:#041E42;font-size:15px;margin-bottom:8px">🏆 اختيار البطل</h3>
+      <p style="font-size:13px;color:#404D4D;line-height:1.8">اختر الفريق الذي تعتقد أنه سيفوز بكأس العالم. إذا كنت محقاً، تحصل على <strong style="color:#0047BB">+10 نقاط إضافية</strong>. يُقفل هذا الاختيار عند بدء البطولة ولا يمكن تغييره بعد ذلك.</p>
+    </div>
+
+    <div class="match-card" style="padding:16px">
+      <h3 style="color:#041E42;font-size:15px;margin-bottom:8px">🔒 مواعيد إغلاق التوقعات</h3>
+      <p style="font-size:13px;color:#404D4D;line-height:1.8">تُقفل كل مباراة <strong>قبل 5 دقائق من انطلاقها</strong> — بعد ذلك لا يمكنك إضافة أو تغيير توقعك لتلك المباراة. يظهر عدّاد تنازلي على بطاقة كل مباراة يوضح الوقت المتبقي. جميع الأوقات معروضة بتوقيت الرياض.</p>
+    </div>
+  `;
+  c.innerHTML = lang==='ar' ? ar : en;
+}
+
 function renderLeaderboard(){
-  const container=document.getElementById('lb-container');
+  // Render into the public container if the public screen is showing, else the main one
+  const onPublic = document.getElementById('screen-login') && document.getElementById('screen-login').style.display !== 'none';
+  const container=document.getElementById(onPublic ? 'pub-lb-container' : 'lb-container') || document.getElementById('lb-container');
   const scores={};
-  Object.values(state.players).forEach(p=>{scores[p.name]=0;});
+  Object.values(state.players).forEach(p=>{ if(p.name!=='Admin') scores[p.name]=0; });
   Object.entries(state.results).forEach(([mid,result])=>{
     if(mid==='CHAMPION_LOCKED') return;
     Object.entries(state.predictions).forEach(([pname,preds])=>{
@@ -1223,7 +1385,7 @@ function renderLeaderboard(){
     <div class="lb-row">
       <div class="lb-rank">${medals[i]||i+1}</div>
       <div class="lb-name">
-        <div class="name">${name}${name===currentUser.name?' <span style="font-size:11px;color:#0047BB">(you)</span>':''}</div>
+        <div class="name">${name}${(currentUser&&name===currentUser.name)?(lang==='ar'?' <span style="font-size:11px;color:#0047BB">(أنت)</span>':' <span style="font-size:11px;color:#0047BB">(you)</span>'):''}</div>
         ${state.champion_picks[name]?`<div class="champ">${t('champ_pick')}: ${state.champion_picks[name]}</div>`:''}
       </div>
       <div class="lb-pts">
@@ -1236,34 +1398,19 @@ function renderLeaderboard(){
 function renderAdmin(){
   if(!currentUser.isAdmin) return;
 
-  // Render pending registrations
-  const pending = state.pending || [];
-  const pendingCount = document.getElementById('pending-count');
-  const pendingList = document.getElementById('pending-list');
-  const pendingBlock = document.getElementById('pending-block');
-  if(pendingCount) pendingCount.textContent = pending.length ? pending.length+' pending' : '';
-  if(pendingBlock) pendingBlock.style.display = pending.length ? 'block' : 'none';
-  if(pendingList){
-    pendingList.innerHTML = pending.length ? pending.map((p,i)=>`
-      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid #E6E7E8">
-        <div style="flex:1">
-          <span style="font-weight:600;font-size:14px">${p.name}</span>
-          <span style="font-size:12px;color:#939598;margin-left:8px">PIN: <span style="font-family:monospace;letter-spacing:2px">${p.pin}</span></span>
-        </div>
-        <button class="btn btn-sm" style="border-color:#0047BB;color:#0047BB;background:#E8EEF8" onclick="approvePlayer(${i})">Approve</button>
-        <button class="btn btn-sm" style="border-color:#F5C0A0;color:#C53A00;background:#FDEEE8" onclick="rejectPlayer(${i})">Reject</button>
-      </div>`).join('') : '';
-  }
-
   const tbody=document.getElementById('players-tbody');
   const players=Object.values(state.players);
   tbody.innerHTML=players.length?players.map(p=>`
     <tr>
       <td style="font-weight:500">${p.name}</td>
       <td style="font-family:monospace;letter-spacing:2px">${p.pin}</td>
-      <td>${Object.keys(state.predictions[p.name]||{}).length} matches</td>
+      <td>${Object.keys(state.predictions[p.name]||{}).length}</td>
       <td style="color:#0047BB">${state.champion_picks[p.name]||'—'}</td>
-    </tr>`).join(''):`<tr><td colspan="4" style="color:#939598;padding:8px">${t('no_players')}</td></tr>`;
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm" onclick="editPlayer('${p.name.replace(/'/g,"\\'")}')" style="border-color:#0047BB;color:#0047BB;padding:3px 8px;font-size:11px;margin-right:4px">Edit</button>
+        ${p.name!=='Admin'?`<button class="btn btn-sm" onclick="removePlayer('${p.name.replace(/'/g,"\\'")}')" style="border-color:#E35205;color:#E35205;padding:3px 8px;font-size:11px">Remove</button>`:''}
+      </td>
+    </tr>`).join(''):`<tr><td colspan="5" style="color:#939598;padding:8px">${t('no_players')}</td></tr>`;
 
   const allMatches=[];
   Object.entries(GROUPS).forEach(([g,teams])=>{
@@ -1499,23 +1646,6 @@ function removePlayer(name) {
   if (msg) { msg.innerHTML = '<span class="alert alert-success" style="display:inline-block">✓ ' + name + ' removed.</span>'; setTimeout(() => { msg.innerHTML = ''; }, 3000); }
 }
 
-function approvePlayer(index){
-  const p = state.pending[index];
-  if(!p) return;
-  state.players[p.name] = {name: p.name, pin: p.pin};
-  state.pending.splice(index, 1);
-  saveStateToSheet({mergeScope:"admin"});
-  renderAdmin();
-  renderLeaderboard();
-}
-
-function rejectPlayer(index){
-  state.pending.splice(index, 1);
-  saveStateToSheet({mergeScope:"admin"});
-  renderAdmin();
-}
-
-
 let countdownInterval = null;
 function startAutoFetch() {
   // No external API — just keep the live countdowns ticking
@@ -1555,6 +1685,17 @@ async function init(){
   await loadStateFromSheet();
   document.getElementById('loading-overlay').style.display='none';
   document.getElementById('app').style.display='block';
+  // Pre-render the public leaderboard + rules so they're ready before login
+  try { renderLeaderboard(); } catch(e){}
+  try { renderRules(); } catch(e){}
+  // Periodically refresh the public leaderboard so visitors see new results (no API, just our Sheet)
+  setInterval(async () => {
+    const loginVisible = document.getElementById('screen-login') && document.getElementById('screen-login').style.display !== 'none';
+    const lbVisible = document.getElementById('panel-leaderboard') && document.getElementById('panel-leaderboard').style.display === 'block';
+    if (loginVisible && lbVisible) {
+      try { const latest = await loadRawState(); if (latest && latest.players) { state = latest; renderLeaderboard(); } } catch(e){}
+    }
+  }, 120 * 1000);
 }
 
 document.getElementById('inp-pin').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
