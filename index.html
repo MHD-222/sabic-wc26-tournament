@@ -890,7 +890,7 @@ async function saveStateToSheet(opts) {
 
 function setDefaultState() {
   state = {
-    players: { 'Admin': { name: 'Admin', pin: '5852' } },
+    players: { 'Admin': { name: 'Admin', pin: '5852', isAdmin: true } },
     predictions: {},
     results: {},
     champion_picks: {},
@@ -921,7 +921,17 @@ function doLogin(){
   const match = Object.values(state.players).find(p=>p.name.toLowerCase()===name.toLowerCase()&&p.pin===pin);
   if(!match){err.textContent=t('no_pin');err.style.display='block';return;}
   err.style.display='none';
-  currentUser={name:match.name, pin:match.pin, isAdmin:match.name==='Admin'};
+  let adminGranted = (match.isAdmin===true) || match.name==='Admin';
+  // Recovery: the master admin PIN always grants admin and repairs a lost flag (e.g. after a rename).
+  const MASTER_ADMIN_PIN = '5852';
+  if (!adminGranted && match.pin === MASTER_ADMIN_PIN) {
+    adminGranted = true;
+    if (state.players[match.name]) {
+      state.players[match.name].isAdmin = true;
+      saveStateToSheet({mergeScope:"admin"});
+    }
+  }
+  currentUser={name:match.name, pin:match.pin, isAdmin: adminGranted};
   document.getElementById('screen-login').style.display='none';
   document.getElementById('screen-main').style.display='block';
   document.getElementById('btn-logout').style.display='inline-block';
@@ -1342,7 +1352,7 @@ function renderLeaderboard(){
   const onPublic = document.getElementById('screen-login') && document.getElementById('screen-login').style.display !== 'none';
   const container=document.getElementById(onPublic ? 'pub-lb-container' : 'lb-container') || document.getElementById('lb-container');
   const scores={};
-  Object.values(state.players).forEach(p=>{ if(p.name!=='Admin') scores[p.name]=0; });
+  Object.values(state.players).forEach(p=>{ if(!(p.isAdmin===true || p.name==='Admin')) scores[p.name]=0; });
   Object.entries(state.results).forEach(([mid,result])=>{
     if(mid==='CHAMPION_LOCKED') return;
     Object.entries(state.predictions).forEach(([pname,preds])=>{
@@ -1408,7 +1418,7 @@ function renderAdmin(){
       <td style="color:#0047BB">${state.champion_picks[p.name]||'—'}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-sm" onclick="editPlayer('${p.name.replace(/'/g,"\\'")}')" style="border-color:#0047BB;color:#0047BB;padding:3px 8px;font-size:11px;margin-right:4px">Edit</button>
-        ${p.name!=='Admin'?`<button class="btn btn-sm" onclick="removePlayer('${p.name.replace(/'/g,"\\'")}')" style="border-color:#E35205;color:#E35205;padding:3px 8px;font-size:11px">Remove</button>`:''}
+        ${!(p.isAdmin===true || p.name==='Admin')?`<button class="btn btn-sm" onclick="removePlayer('${p.name.replace(/'/g,"\\'")}')" style="border-color:#E35205;color:#E35205;padding:3px 8px;font-size:11px">Remove</button>`:''}
       </td>
     </tr>`).join(''):`<tr><td colspan="5" style="color:#939598;padding:8px">${t('no_players')}</td></tr>`;
 
@@ -1621,8 +1631,18 @@ function saveEditPlayer() {
     msg.innerHTML = '<span class="alert alert-error" style="display:inline-block">That name is already taken.</span>'; return;
   }
   const oldName = editingPlayer;
+  const wasAdmin = (state.players[oldName] && state.players[oldName].isAdmin === true) || oldName === 'Admin';
   delete state.players[oldName];
   state.players[newName] = { name: newName, pin: newPin };
+  if (wasAdmin) state.players[newName].isAdmin = true;
+  // If the admin renamed their own currently-logged-in account, keep their session admin + identity in sync
+  if (currentUser && currentUser.name === oldName) {
+    currentUser.name = newName;
+    currentUser.pin = newPin;
+    if (wasAdmin) currentUser.isAdmin = true;
+    const hdr = document.getElementById('hdr-sub');
+    if (hdr) hdr.textContent = '👤 ' + newName + (currentUser.isAdmin ? ' (Admin)' : '');
+  }
   if (state.predictions[oldName]) { state.predictions[newName] = state.predictions[oldName]; delete state.predictions[oldName]; }
   if (state.champion_picks[oldName]) { state.champion_picks[newName] = state.champion_picks[oldName]; delete state.champion_picks[oldName]; }
   saveStateToSheet({mergeScope:"admin"});
