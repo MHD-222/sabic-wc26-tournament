@@ -51,6 +51,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .penalty-btn.selected{background:#FFA300;color:#fff;border-color:#FFA300;font-weight:700}
 .penalty-btn:disabled{opacity:0.5;cursor:not-allowed}
 .team-name.winning{color:#0047BB;font-weight:700}
+.res-chip{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px}
+.res-chip.exact{background:#0047BB;color:#fff}
+.res-chip.result{background:#FFF3E0;color:#7A3F00;border:1px solid #FFA300}
+.res-chip.miss{background:#FDEEE8;color:#C53A00;border:1px solid #E35205}
+.res-chip.pending{background:#E6E7E8;color:#939598}
+.mr-stat{display:inline-block;text-align:center;padding:8px 14px;background:#fff;border:1px solid #C6C8CA;border-radius:10px;margin:0 6px 6px 0}
+.mr-stat .num{font-size:20px;font-weight:700;color:#0047BB;display:block}
+.mr-stat .lbl{font-size:11px;color:#939598}
 .team-name.losing{color:#939598;font-weight:400}
 .score-input.winning{border-color:#0047BB;color:#0047BB}
 .badge{display:inline-flex;align-items:center;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600}
@@ -187,6 +195,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <button class="nav-btn" onclick="showTab('knockout')" id="tab-btn-knockout" data-en="Knockout" data-ar="إقصائي">Knockout</button>
       <button class="nav-btn" onclick="showTab('champion')" id="tab-btn-champion" data-en="Champion" data-ar="البطل">Champion</button>
       <button class="nav-btn" onclick="showTab('leaderboard')" id="tab-btn-leaderboard" data-en="Leaderboard" data-ar="الترتيب">Leaderboard</button>
+      <button class="nav-btn" onclick="showTab('myresults')" id="tab-btn-myresults" data-en="My Results" data-ar="نتائجي">My Results</button>
       <button class="nav-btn" onclick="showTab('rules')" id="tab-btn-rules" data-en="Rules" data-ar="القواعد">Rules</button>
       <button class="nav-btn" onclick="showTab('admin')" id="tab-btn-admin" style="display:none" data-en="Admin" data-ar="الإدارة">Admin</button>
     </div>
@@ -223,6 +232,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <p class="section-title" id="title-lb">Leaderboard</p>
       <p class="section-sub">Live standings. Updated as the admin enters match results.</p>
       <div id="lb-container"></div>
+    </div>
+
+    <!-- MY RESULTS TAB -->
+    <div id="tab-myresults" class="tab-content">
+      <p class="section-title" id="title-myresults">My results</p>
+      <p class="section-sub" id="sub-myresults">How your predictions scored, match by match.</p>
+      <div id="myresults-summary"></div>
+      <div id="myresults-container"></div>
     </div>
 
     <!-- RULES TAB -->
@@ -294,6 +311,36 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <h3>Results entered</h3>
         <p style="font-size:12px;color:#939598;margin-bottom:10px">All results currently saved. Click Reset to remove a result and re-enter it.</p>
         <div id="results-list"></div>
+      </div>
+
+      <div class="admin-block">
+        <h3>Edit a player's prediction</h3>
+        <p style="font-size:12px;color:#939598;margin-bottom:10px">Override any player's prediction for any match — works even after kickoff. Only that player's entry is changed.</p>
+        <div class="field">
+          <label>Player</label>
+          <select id="pe-player" style="font-size:13px" onchange="peLoad()"></select>
+        </div>
+        <div class="field">
+          <label>Match</label>
+          <select id="pe-match" style="font-size:13px" onchange="peLoad()"></select>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span style="font-size:13px;color:#404D4D;min-width:90px;text-align:right" id="pe-home-lbl">Home</span>
+          <input type="number" id="pe-h" min="0" max="20" class="inline-input" style="width:55px;text-align:center;font-size:18px;font-weight:600" inputmode="numeric" oninput="peUpdatePenRow()"/>
+          <span style="color:#939598">–</span>
+          <input type="number" id="pe-a" min="0" max="20" class="inline-input" style="width:55px;text-align:center;font-size:18px;font-weight:600" inputmode="numeric" oninput="peUpdatePenRow()"/>
+          <span style="font-size:13px;color:#404D4D;min-width:90px" id="pe-away-lbl">Away</span>
+        </div>
+        <div id="pe-pen-row" style="display:none;align-items:center;gap:8px;margin-bottom:10px;padding:10px;background:#FFF3E0;border-radius:8px;border:1px solid #FFA300">
+          <span style="font-size:12px;color:#7A3F00;font-weight:600">🏆 Penalty winner:</span>
+          <button class="penalty-btn" id="pe-pen-H" onclick="pePen('H')" style="flex:1">Home</button>
+          <button class="penalty-btn" id="pe-pen-A" onclick="pePen('A')" style="flex:1">Away</button>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-sm btn-primary" onclick="peSave()" style="width:auto">Save prediction</button>
+          <button class="btn btn-sm" onclick="peClear()" style="width:auto;border-color:#E35205;color:#E35205">Clear prediction</button>
+        </div>
+        <div id="pe-msg" style="margin-top:8px"></div>
       </div>
 
       <div class="admin-block">
@@ -733,6 +780,8 @@ function applyLangToMain(){
   set('title-champion','Champion pick','اختيار البطل');
   set('title-lb','Leaderboard','ترتيب اللاعبين');
   set('title-rules','Tournament rules & scoring','قواعد البطولة واحتساب النقاط');
+  set('title-myresults','My results','نتائجي');
+  set('sub-myresults','How your predictions scored, match by match.','كيف سجّلت توقعاتك، مباراة بمباراة.');
   set('sub-rules','How the tournament works and how points are calculated.','كيف تعمل البطولة وكيف تُحتسب النقاط.');
   set('sub-knockout','Each prediction locks 5 minutes before kickoff. Scores are based on the full match final score including extra time.','تُقفل كل توقعات قبل 5 دقائق من انطلاق المباراة. تُحتسب النتائج على أساس النتيجة النهائية شاملة الوقت الإضافي.');
   set('sub-champion','Pick the team you think wins the World Cup. Worth +10 bonus points. Locks before the opening match.','اختر الفريق الذي تعتقد أنه سيفوز بكأس العالم. يساوي +10 نقاط إضافية. يُقفل قبل المباراة الافتتاحية.');
@@ -770,6 +819,7 @@ function applyLangToMain(){
     try{ renderChampion(); }catch(e){}
     try{ renderLeaderboard(); }catch(e){}
     try{ renderRules(); }catch(e){}
+    try{ renderMyResults(); }catch(e){}
   } else {
     try{ renderLeaderboard(); }catch(e){}
     try{ renderRules(); }catch(e){}
@@ -1067,6 +1117,7 @@ function showTab(tab){
   if(saveTextMap[tab]) document.getElementById('btn-save-text').textContent = saveTextMap[tab];
   if(tab==='leaderboard') renderLeaderboard();
   if(tab==='rules') renderRules();
+  if(tab==='myresults') renderMyResults();
   if(tab==='admin') renderAdmin();
 }
 
@@ -1103,6 +1154,29 @@ function renderGroups(){
     if(!b.kickoffIso) return -1;
     return new Date(a.kickoffIso) - new Date(b.kickoffIso);
   });
+
+  // Unpredicted-upcoming alert: matches still open (not locked) with no prediction yet
+  const openUnpredicted = matches.filter(m=>{
+    const locked = state.results[m.mid] || isMatchLocked(m.schedKey||m.mid);
+    return !locked && !userPreds[m.mid];
+  });
+  if(openUnpredicted.length){
+    const ar = (lang==='ar');
+    // find the soonest one to show its countdown
+    let soonest=null, soonestMs=Infinity;
+    openUnpredicted.forEach(m=>{
+      const ms = m.schedKey?getTimeUntilLock(m.schedKey):Infinity;
+      if(ms!==null && ms<soonestMs){ soonestMs=ms; soonest=m; }
+    });
+    const banner=document.createElement('div');
+    banner.className='alert alert-warn';
+    banner.style.cssText='margin-bottom:1rem;display:flex;align-items:center;gap:8px';
+    const soonStr = soonest ? formatCountdown(soonestMs) : '';
+    banner.innerHTML = `⏳ <span>${ar
+      ? `لديك <strong>${openUnpredicted.length}</strong> مباراة قادمة بدون توقع.`
+      : `You have <strong>${openUnpredicted.length}</strong> upcoming match${openUnpredicted.length>1?'es':''} without a prediction.`}${soonest&&soonStr?` ${ar?'الأقرب':'Next'}: <strong>${soonStr}</strong>.`:''}</span>`;
+    container.appendChild(banner);
+  }
 
   let lastDay = '';
   matches.forEach(m=>{
@@ -1245,6 +1319,172 @@ function logoImg(teamName, size) {
   return `<img src="${url}" alt="" style="width:${s}px;height:${s}px;object-fit:contain;vertical-align:middle" onerror="this.style.display='none'"/>`;
 }
 
+function peTeamsFor(mid){
+  if(mid && mid.startsWith('G')){
+    const m = mid.match(/^G([A-L])_(\d+)_(\d+)$/);
+    if(m){ const g=GROUPS[m[1]]; return [g[+m[2]], g[+m[3]]]; }
+  }
+  return ['Home','Away'];
+}
+
+let pePenPick = null;
+
+function peLoad(){
+  const pname = document.getElementById('pe-player').value;
+  const mid = document.getElementById('pe-match').value;
+  if(!pname || !mid) return;
+  const teams = peTeamsFor(mid);
+  document.getElementById('pe-home-lbl').textContent = teams[0];
+  document.getElementById('pe-away-lbl').textContent = teams[1];
+  const pred = (state.predictions[pname]||{})[mid];
+  document.getElementById('pe-h').value = pred ? pred.h : '';
+  document.getElementById('pe-a').value = pred ? pred.a : '';
+  pePenPick = pred && pred.pen ? pred.pen : null;
+  peUpdatePenRow();
+  const msg = document.getElementById('pe-msg');
+  if(msg) msg.innerHTML = pred
+    ? `<span style="font-size:12px;color:#939598">Current saved: ${pred.h}–${pred.a}${pred.pen?' (pen '+pred.pen+')':''}</span>`
+    : `<span style="font-size:12px;color:#939598">No prediction saved for this match.</span>`;
+}
+
+function peUpdatePenRow(){
+  const h = parseInt(document.getElementById('pe-h').value);
+  const a = parseInt(document.getElementById('pe-a').value);
+  const mid = document.getElementById('pe-match').value;
+  const isKO = mid && mid.startsWith('KO_');
+  const row = document.getElementById('pe-pen-row');
+  if(isKO && !isNaN(h) && !isNaN(a) && h===a){
+    row.style.display='flex';
+    document.getElementById('pe-pen-H').classList.toggle('selected', pePenPick==='H');
+    document.getElementById('pe-pen-A').classList.toggle('selected', pePenPick==='A');
+  } else {
+    row.style.display='none';
+  }
+}
+
+function pePen(team){ pePenPick = team; peUpdatePenRow(); }
+
+async function peSave(){
+  const pname = document.getElementById('pe-player').value;
+  const mid = document.getElementById('pe-match').value;
+  const msg = document.getElementById('pe-msg');
+  if(!pname){ msg.innerHTML='<span class="alert alert-error" style="display:inline-block">Select a player.</span>'; return; }
+  const h = parseInt(document.getElementById('pe-h').value);
+  const a = parseInt(document.getElementById('pe-a').value);
+  if(isNaN(h)||isNaN(a)){ msg.innerHTML='<span class="alert alert-error" style="display:inline-block">Enter both scores.</span>'; return; }
+  if(!state.predictions[pname]) state.predictions[pname] = {};
+  const entry = { h, a };
+  if(mid.startsWith('KO_') && h===a && pePenPick) entry.pen = pePenPick;
+  state.predictions[pname][mid] = entry;
+  // Merge-safe save: load latest, set just this player's match, save
+  await saveStateToSheet({mergeScope:"admin"});
+  renderLeaderboard();
+  renderAdmin();
+  msg.innerHTML = `<div class="alert alert-success">✓ Saved ${pname}: ${h}–${a}${entry.pen?' (pen '+entry.pen+')':''} for this match.</div>`;
+  setTimeout(()=>{ if(msg) peLoad(); }, 2500);
+}
+
+async function peClear(){
+  const pname = document.getElementById('pe-player').value;
+  const mid = document.getElementById('pe-match').value;
+  const msg = document.getElementById('pe-msg');
+  if(!pname || !state.predictions[pname] || !state.predictions[pname][mid]){
+    msg.innerHTML='<span style="font-size:12px;color:#939598">Nothing to clear.</span>'; return;
+  }
+  if(!confirm(`Clear ${pname}'s prediction for this match?`)) return;
+  delete state.predictions[pname][mid];
+  await saveStateToSheet({mergeScope:"admin"});
+  renderLeaderboard();
+  renderAdmin();
+  msg.innerHTML = `<div class="alert alert-warn">Prediction cleared.</div>`;
+  document.getElementById('pe-h').value='';
+  document.getElementById('pe-a').value='';
+  pePenPick=null; peUpdatePenRow();
+}
+
+function renderMyResults(){
+  const sumEl = document.getElementById('myresults-summary');
+  const c = document.getElementById('myresults-container');
+  if(!c || !currentUser) return;
+  const preds = state.predictions[currentUser.name] || {};
+  const ar = (lang==='ar');
+
+  // Build team lookups for group matches
+  function teamsFor(mid){
+    if(mid.startsWith('G')){
+      const m = mid.match(/^G([A-L])_(\d+)_(\d+)$/);
+      if(m){ const g=GROUPS[m[1]]; return [g[+m[2]], g[+m[3]]]; }
+    }
+    return null;
+  }
+  function koLabel(mid){
+    const r = KO_ROUNDS.find(rr => mid.startsWith('KO_'+rr.id+'_'));
+    const idx = mid.split('_').pop();
+    if(!r) return mid;
+    return (ar?r.labelAr:r.label) + ' · ' + (ar?'مباراة':'Match') + ' ' + idx;
+  }
+
+  let total=0, exact=0, correct=0, missed=0, scored=0, predictedCount=0;
+  const rows=[];
+  // Sort: scored matches first (by kickoff via schedule), then pending
+  const allMids = Object.keys(preds);
+  predictedCount = allMids.length;
+  allMids.forEach(mid=>{
+    const pred = preds[mid];
+    const result = state.results[mid];
+    const tm = teamsFor(mid);
+    const title = tm ? `${tm[0]} ${ar?'ضد':'vs'} ${tm[1]}` : koLabel(mid);
+    const predStr = `${pred.h}–${pred.a}` + (pred.pen?` (${ar?'ترجيح':'pen'}: ${pred.pen==='H'?(tm?tm[0]:'H'):(tm?tm[1]:'A')})`:'');
+    if(result){
+      scored++;
+      const sc = scoreOneMatch(mid, pred, result);
+      total += sc.points;
+      if(sc.cls==='exact') exact++; else if(sc.cls==='result') correct++; else missed++;
+      const resStr = `${result.h}–${result.a}` + (result.pen?` (${ar?'ترجيح':'pen'}: ${result.pen})`:'');
+      rows.push({done:true, title, predStr, resStr, sc});
+    } else {
+      rows.push({done:false, title, predStr});
+    }
+  });
+
+  // Summary stat cards
+  sumEl.innerHTML = `
+    <div style="margin-bottom:1rem">
+      <span class="mr-stat"><span class="num">${total}</span><span class="lbl">${ar?'مجموع النقاط':'Total pts'}</span></span>
+      <span class="mr-stat"><span class="num">${exact}</span><span class="lbl">${ar?'نتيجة مطابقة':'Exact'}</span></span>
+      <span class="mr-stat"><span class="num">${correct}</span><span class="lbl">${ar?'نتيجة صحيحة':'Correct'}</span></span>
+      <span class="mr-stat"><span class="num">${missed}</span><span class="lbl">${ar?'خطأ':'Missed'}</span></span>
+      <span class="mr-stat"><span class="num">${predictedCount}/104</span><span class="lbl">${ar?'تم توقعها':'Predicted'}</span></span>
+    </div>`;
+
+  if(!rows.length){
+    c.innerHTML = `<div class="alert alert-info">${ar?'لم تُدخل أي توقعات بعد.':'You haven\'t entered any predictions yet.'}</div>`;
+    return;
+  }
+  // Show scored first
+  rows.sort((a,b)=> (a.done===b.done)?0:(a.done?-1:1));
+  c.innerHTML = rows.map(r=>{
+    if(r.done){
+      return `<div class="match-card">
+        <div class="match-meta">${r.title}
+          <span class="res-chip ${r.sc.cls}" style="margin-left:auto">${(ar?r.sc.labelAr:r.sc.label)} · +${r.sc.points}</span>
+        </div>
+        <div style="display:flex;gap:16px;font-size:13px;color:#404D4D">
+          <span>${ar?'توقعك':'Your pick'}: <strong>${r.predStr}</strong></span>
+          <span>${ar?'النتيجة':'Actual'}: <strong style="color:#041E42">${r.resStr}</strong></span>
+        </div>
+      </div>`;
+    } else {
+      return `<div class="match-card" style="opacity:0.75">
+        <div class="match-meta">${r.title}
+          <span class="res-chip pending" style="margin-left:auto">${ar?'لم تُلعب بعد':'Not played yet'}</span>
+        </div>
+        <div style="font-size:13px;color:#404D4D">${ar?'توقعك':'Your pick'}: <strong>${r.predStr}</strong></div>
+      </div>`;
+    }
+  }).join('');
+}
+
 function renderRules(){
   const onPublic = document.getElementById('screen-login') && document.getElementById('screen-login').style.display !== 'none';
   const c = document.getElementById(onPublic ? 'pub-rules-container' : 'rules-container') || document.getElementById('rules-container');
@@ -1347,6 +1587,27 @@ function renderRules(){
   c.innerHTML = lang==='ar' ? ar : en;
 }
 
+function scoreOneMatch(mid, pred, result){
+  // Returns {points, label, labelAr, cls} for a single predicted match against its result.
+  if(!pred || !result) return null;
+  let mult=1;
+  if(mid.includes('KO_QF')) mult=2;
+  if(mid.includes('KO_SF')||mid.includes('KO_F_')) mult=3;
+  const pH=parseInt(pred.h), pA=parseInt(pred.a), rH=result.h, rA=result.a;
+  let actualWinner = rH>rA?'H':rH<rA?'A':'D';
+  if(actualWinner==='D'&&result.pen) actualWinner=result.pen;
+  let predWinner = pH>pA?'H':pH<pA?'A':'D';
+  if(predWinner==='D'&&pred.pen) predWinner=pred.pen;
+  const exactScore = pH===rH && pA===rA;
+  const exactPen = !result.pen || pred.pen===result.pen;
+  let pts=0, label='Missed', labelAr='خطأ', cls='miss';
+  if(exactScore && exactPen){ pts=3*mult; label='Exact score!'; labelAr='نتيجة مطابقة!'; cls='exact'; }
+  else if(predWinner!=='D' && predWinner===actualWinner){ pts=1*mult; label='Correct result'; labelAr='النتيجة صحيحة'; cls='result'; }
+  else if(predWinner==='D' && exactScore && !exactPen){ pts=1*mult; label='Right score, wrong pens'; labelAr='النتيجة صحيحة، الترجيح خطأ'; cls='result'; }
+  else if(predWinner===actualWinner){ pts=1*mult; label='Correct result'; labelAr='النتيجة صحيحة'; cls='result'; }
+  return {points:pts, label, labelAr, cls, mult};
+}
+
 function renderLeaderboard(){
   // Render into the public container if the public screen is showing, else the main one
   const onPublic = document.getElementById('screen-login') && document.getElementById('screen-login').style.display !== 'none';
@@ -1358,29 +1619,8 @@ function renderLeaderboard(){
     Object.entries(state.predictions).forEach(([pname,preds])=>{
       const pred=preds[mid];
       if(!pred) return;
-      let mult=1;
-      if(mid.includes('KO_QF')) mult=2;
-      if(mid.includes('KO_SF')||mid.includes('KO_F_')) mult=3;
-      const pH=parseInt(pred.h); const pA=parseInt(pred.a);
-      const rH=result.h; const rA=result.a;
-      // Determine actual winner (considering penalties)
-      let actualWinner = rH>rA?'H':rH<rA?'A':'D';
-      if(actualWinner==='D'&&result.pen) actualWinner=result.pen; // penalty winner
-      // Determine predicted winner
-      let predWinner = pH>pA?'H':pH<pA?'A':'D';
-      if(predWinner==='D'&&pred.pen) predWinner=pred.pen; // predicted penalty winner
-      // Exact score check (draw score must also match penalty winner if applicable)
-      const exactScore = pH===rH && pA===rA;
-      const exactPen = !result.pen || pred.pen===result.pen;
-      if(exactScore && exactPen){
-        scores[pname]=(scores[pname]||0)+3*mult; // full points
-      } else if(predWinner!=='D' && predWinner===actualWinner){
-        scores[pname]=(scores[pname]||0)+1*mult; // correct winner
-      } else if(predWinner==='D' && exactScore && !exactPen){
-        scores[pname]=(scores[pname]||0)+1*mult; // right draw score, wrong pen
-      } else if(predWinner===actualWinner){
-        scores[pname]=(scores[pname]||0)+1*mult; // correct winner via pen
-      }
+      const sc = scoreOneMatch(mid, pred, result);
+      if(sc) scores[pname]=(scores[pname]||0)+sc.points;
     });
   });
   if(state.actual_champion){
@@ -1441,6 +1681,18 @@ function renderAdmin(){
     document.getElementById('res-away-lbl').textContent=teams[1]||'Away';
   };
   sel.dispatchEvent(new Event('change'));
+
+  // Populate the player-prediction editor dropdowns
+  const pePlayer = document.getElementById('pe-player');
+  if (pePlayer) {
+    const realPlayers = Object.values(state.players).filter(p=>!(p.isAdmin===true||p.name==='Admin'));
+    pePlayer.innerHTML = realPlayers.length
+      ? realPlayers.map(p=>`<option value="${p.name.replace(/"/g,'&quot;')}">${p.name}</option>`).join('')
+      : '<option value="">(no players yet)</option>';
+    const peMatch = document.getElementById('pe-match');
+    peMatch.innerHTML = allMatches.map(m=>`<option value="${m.id}" data-label="${m.label}">${m.label}</option>`).join('');
+    peLoad();
+  }
 
   const csel=document.getElementById('champ-winner-select');
   csel.innerHTML=ALL_TEAMS.map(t=>`<option value="${t}"${state.actual_champion===t?' selected':''}>${t}</option>`).join('');
