@@ -56,6 +56,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .res-chip.result{background:#FFF3E0;color:#7A3F00;border:1px solid #FFA300}
 .res-chip.miss{background:#FDEEE8;color:#C53A00;border:1px solid #E35205}
 .res-chip.pending{background:#E6E7E8;color:#939598}
+.exact-badge{display:inline-block;font-size:11px;font-weight:700;background:#0047BB;color:#fff;padding:1px 7px;border-radius:10px;margin-left:4px;vertical-align:middle}
+.lb-row.podium{border-radius:10px;margin-bottom:4px;padding-left:8px;padding-right:8px}
+.lb-row.podium-1{background:linear-gradient(90deg,#FFF7E0,#FFFDF5);border:1px solid #FFD24D}
+.lb-row.podium-2{background:linear-gradient(90deg,#F2F4F7,#FBFCFD);border:1px solid #D0D5DD}
+.lb-row.podium-3{background:linear-gradient(90deg,#FBEEE3,#FEFAF6);border:1px solid #E8B891}
+.pick-pop{font-size:11px;color:#939598;margin-top:6px;line-height:1.5}
+.pick-pop .seg{display:inline-block;margin-right:8px;white-space:nowrap}
+.pick-pop .barwrap{display:flex;height:6px;border-radius:4px;overflow:hidden;margin-top:4px;background:#E6E7E8}
+.pick-pop .bar-h{background:#0047BB}
+.pick-pop .bar-d{background:#FFA300}
+.pick-pop .bar-a{background:#009FDF}
 .mr-stat{display:inline-block;text-align:center;padding:8px 14px;background:#fff;border:1px solid #C6C8CA;border-radius:10px;margin:0 6px 6px 0}
 .mr-stat .num{font-size:20px;font-weight:700;color:#0047BB;display:block}
 .mr-stat .lbl{font-size:11px;color:#939598}
@@ -219,7 +230,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <!-- CHAMPION TAB -->
     <div id="tab-champion" class="tab-content">
       <p class="section-title" id="title-champion">Champion pick</p>
-      <p class="section-sub" id="sub-champion">Pick the team you think wins the World Cup. Worth +10 bonus points. Locks before the opening match.</p>
+      <p class="section-sub" id="sub-champion">Pick the team you think wins the World Cup. Worth +10 bonus points. You can change it any time until the Round of 16 begins.</p>
       <div id="champ-alert"></div>
       <div class="champ-grid" id="champ-grid"></div>
       <button class="btn btn-primary" id="btn-save-champ" onclick="saveChampion()">
@@ -280,8 +291,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
 
       <div class="admin-block">
-        <h3>Enter match result</h3>
-        <p style="font-size:12px;color:#939598;margin-bottom:10px">Select a match, enter the full time final score, and save. Points are calculated automatically.</p>
+        <h3>⚡ Matches awaiting a result</h3>
+        <p style="font-size:12px;color:#939598;margin-bottom:10px">Matches that have already kicked off but have no result yet. Type the full-time score and save — fastest way to keep the leaderboard current.</p>
+        <div id="awaiting-results"></div>
+      </div>
+
+      <div class="admin-block">
+        <h3>Enter / correct any match result</h3>
+        <p style="font-size:12px;color:#939598;margin-bottom:10px">Manually pick any match (e.g. to correct an earlier entry), enter the full time final score, and save.</p>
         <div class="field">
           <label>Match</label>
           <select id="result-select" style="font-size:13px"></select>
@@ -380,7 +397,7 @@ const T = {
     title_ko: 'Knockout stage',
     sub_ko: 'Each prediction locks 5 minutes before kickoff. Scores are based on the full match final score including extra time and penalties.',
     title_champ: 'Champion pick',
-    sub_champ: 'Pick the team you think wins the World Cup. Worth +10 bonus points. Locks before the opening match.',
+    sub_champ: 'Pick the team you think wins the World Cup. Worth +10 bonus points. You can change it any time until the Round of 16 begins.',
     title_lb: 'Leaderboard',
     save_groups: 'Save group predictions',
     save_ko: 'Save knockout predictions',
@@ -712,8 +729,17 @@ const TEAM_PAIR_TO_SCHEDULE = {};
 })();
 
 
-// Tournament-wide lock: champion pick & group predictions lock at the opening match kickoff.
+// Tournament-wide lock: group predictions lock at the opening match kickoff.
 const OPENING_MATCH_KEY = 'GA_MEX_RSA';
+// Champion pick now locks at the first Round-of-16 match kickoff (5 min before).
+const CHAMPION_LOCK_KEY = 'KO_R16_1';
+function isChampionLocked() {
+  const kickoff = MATCH_SCHEDULE[CHAMPION_LOCK_KEY];
+  if (!kickoff) return false;
+  const lockTime = new Date(kickoff);
+  lockTime.setMinutes(lockTime.getMinutes() - 5);
+  return new Date() >= lockTime;
+}
 function isTournamentStarted() {
   const kickoff = MATCH_SCHEDULE[OPENING_MATCH_KEY];
   if (!kickoff) return false;
@@ -755,6 +781,22 @@ const KO_ROUNDS = [
   {id:'F',   label:'Final', labelAr:'النهائي', matches:1, mult:3}
 ];
 
+const TEAM_FLAGS = {
+  'Mexico':'🇲🇽','South Africa':'🇿🇦','South Korea':'🇰🇷','Czech Republic':'🇨🇿',
+  'Canada':'🇨🇦','Bosnia and Herzegovina':'🇧🇦','Qatar':'🇶🇦','Switzerland':'🇨🇭',
+  'Brazil':'🇧🇷','Morocco':'🇲🇦','Haiti':'🇭🇹','Scotland':'🏴󠁧󠁢󠁳󠁣󠁴󠁿',
+  'United States':'🇺🇸','Paraguay':'🇵🇾','Australia':'🇦🇺','Turkey':'🇹🇷',
+  'Germany':'🇩🇪','Curacao':'🇨🇼','Ivory Coast':'🇨🇮','Ecuador':'🇪🇨',
+  'Netherlands':'🇳🇱','Japan':'🇯🇵','Sweden':'🇸🇪','Tunisia':'🇹🇳',
+  'Belgium':'🇧🇪','Egypt':'🇪🇬','Iran':'🇮🇷','New Zealand':'🇳🇿',
+  'Spain':'🇪🇸','Cape Verde':'🇨🇻','Saudi Arabia':'🇸🇦','Uruguay':'🇺🇾',
+  'France':'🇫🇷','Senegal':'🇸🇳','Iraq':'🇮🇶','Norway':'🇳🇴',
+  'Argentina':'🇦🇷','Algeria':'🇩🇿','Austria':'🇦🇹','Jordan':'🇯🇴',
+  'Portugal':'🇵🇹','DR Congo':'🇨🇩','Uzbekistan':'🇺🇿','Colombia':'🇨🇴',
+  'England':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','Croatia':'🇭🇷','Ghana':'🇬🇭','Panama':'🇵🇦'
+};
+function flagFor(teamName){ return TEAM_FLAGS[teamName] || ''; }
+
 const ALL_TEAMS = Object.values(GROUPS).flat();
 
 function t(key){ return T[lang][key] || key; }
@@ -784,7 +826,7 @@ function applyLangToMain(){
   set('sub-myresults','How your predictions scored, match by match.','كيف سجّلت توقعاتك، مباراة بمباراة.');
   set('sub-rules','How the tournament works and how points are calculated.','كيف تعمل البطولة وكيف تُحتسب النقاط.');
   set('sub-knockout','Each prediction locks 5 minutes before kickoff. Scores are based on the full match final score including extra time.','تُقفل كل توقعات قبل 5 دقائق من انطلاق المباراة. تُحتسب النتائج على أساس النتيجة النهائية شاملة الوقت الإضافي.');
-  set('sub-champion','Pick the team you think wins the World Cup. Worth +10 bonus points. Locks before the opening match.','اختر الفريق الذي تعتقد أنه سيفوز بكأس العالم. يساوي +10 نقاط إضافية. يُقفل قبل المباراة الافتتاحية.');
+  set('sub-champion','Pick the team you think wins the World Cup. Worth +10 bonus points. You can change it any time until the Round of 16 begins.','اختر الفريق الذي تعتقد أنه سيفوز بكأس العالم. يساوي +10 نقاط إضافية. يمكنك تغييره في أي وقت حتى بداية دور الـ16.');
   // sub-groups is set with a progress counter inside renderGroups; handled there.
 
   // Public panel titles & subs
@@ -891,13 +933,22 @@ async function saveStateToSheet(opts) {
           // but preserve any predictions submitted by players in the meantime.
           const localPlayerPreds = state.predictions || {};
           const latestPreds = merged.predictions || {};
-          // Union: keep latest player predictions, local admin doesn't touch these
-          merged.predictions = Object.assign({}, latestPreds, localPlayerPreds);
+          // Union latest + local predictions...
+          let mergedPreds = Object.assign({}, latestPreds, localPlayerPreds);
+          // ...then reconcile against the authoritative (local) player list:
+          // drop predictions/champion picks for players the admin has removed.
+          const liveNames = new Set(Object.keys(state.players || {}));
+          Object.keys(mergedPreds).forEach(n => { if (!liveNames.has(n)) delete mergedPreds[n]; });
+          merged.predictions = mergedPreds;
           // Admin-owned fields come from local state
           merged.players = state.players;
           merged.results = state.results;
           merged.pending = state.pending;
           merged.actual_champion = state.actual_champion;
+          // Reconcile champion picks too
+          const mergedPicks = Object.assign({}, merged.champion_picks || {}, state.champion_picks || {});
+          Object.keys(mergedPicks).forEach(n => { if (!liveNames.has(n)) delete mergedPicks[n]; });
+          merged.champion_picks = mergedPicks;
           // API-sourced data is admin-owned too
           merged.teamLogos = state.teamLogos || merged.teamLogos || {};
           merged.standings = state.standings || merged.standings || {};
@@ -1214,7 +1265,8 @@ function renderGroups(){
         <span class="vs">${lang==='ar'?'ضد':'vs'}</span>
         <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="–" inputmode="numeric" ${locked?'disabled':''} oninput="updateWinIndicator('${mid}');togglePenaltyRow('${mid}')"/>
         <span class="team-name right${locked&&!result?' losing':''}" style="display:flex;align-items:center;gap:5px;justify-content:flex-end">${teams[j]} ${logoImg(teams[j],18)}</span>
-      </div>`;
+      </div>
+      ${pickPopularityHTML(mid, teams[i], teams[j])}`;
     container.appendChild(card);
     if(saved&&!locked) updateWinIndicator(mid);
   });
@@ -1270,13 +1322,13 @@ function renderChampion(){
   const grid=document.getElementById('champ-grid');
   const alert=document.getElementById('champ-alert');
   const existing=state.champion_picks[currentUser.name];
-  const locked=state.results['CHAMPION_LOCKED'] || isTournamentStarted();
+  const locked=state.results['CHAMPION_LOCKED'] || isChampionLocked();
   grid.innerHTML='';
   if (locked) {
     alert.innerHTML = `<div class="alert alert-warn">🔒 ${lang==='ar'?'تم قفل اختيار البطل لأن البطولة بدأت.':'Champion pick is locked — the tournament has started.'} ${existing?(lang==='ar'?'اختيارك:':'Your pick:')+' <strong>'+existing+'</strong>':''}</div>`;
   } else {
     alert.innerHTML = existing
-      ? `<div class="alert alert-success">${lang==='ar'?'اختيارك الحالي':'Your current pick'}: <strong>${existing}</strong>. ${lang==='ar'?'يمكنك التغيير قبل انطلاق البطولة.':'You can change this before the tournament starts.'}</div>`
+      ? `<div class="alert alert-success">${lang==='ar'?'اختيارك الحالي':'Your current pick'}: <strong>${existing}</strong>. ${lang==='ar'?'يمكنك التغيير حتى بداية دور الـ16.':'You can change this until the Round of 16 begins.'}</div>`
       : `<div class="alert alert-info">${lang==='ar'?'لم تختر بعد — اختر فريقاً واحداً.':'You have not made a pick yet — select one team below.'}</div>`;
   }
   ALL_TEAMS.forEach(team=>{
@@ -1315,8 +1367,11 @@ function statusLabel(short) {
 function logoImg(teamName, size) {
   const url = (state.teamLogos && state.teamLogos[teamName]) || '';
   const s = size || 20;
-  if (!url) return `<span style="display:inline-block;width:${s}px"></span>`;
-  return `<img src="${url}" alt="" style="width:${s}px;height:${s}px;object-fit:contain;vertical-align:middle" onerror="this.style.display='none'"/>`;
+  if (url) return `<img src="${url}" alt="" style="width:${s}px;height:${s}px;object-fit:contain;vertical-align:middle" onerror="this.style.display='none'"/>`;
+  // Fallback: country flag emoji (sized relative to requested icon size)
+  const flag = flagFor(teamName);
+  if (flag) return `<span style="font-size:${Math.round(s*0.95)}px;line-height:1;vertical-align:middle">${flag}</span>`;
+  return `<span style="display:inline-block;width:${s}px"></span>`;
 }
 
 function peTeamsFor(mid){
@@ -1528,7 +1583,7 @@ function renderRules(){
 
     <div class="match-card" style="padding:16px">
       <h3 style="color:#041E42;font-size:15px;margin-bottom:8px">🏆 Champion pick</h3>
-      <p style="font-size:13px;color:#404D4D;line-height:1.6">Pick the team you think will win the World Cup. If you're right, you earn a <strong style="color:#0047BB">+10 point bonus</strong>. This pick locks when the tournament begins and can't be changed afterwards.</p>
+      <p style="font-size:13px;color:#404D4D;line-height:1.6">Pick the team you think will win the World Cup. If you're right, you earn a <strong style="color:#0047BB">+10 point bonus</strong>. You can change this pick any time until the Round of 16 begins, then it locks.</p>
     </div>
 
     <div class="match-card" style="padding:16px">
@@ -1576,7 +1631,7 @@ function renderRules(){
 
     <div class="match-card" style="padding:16px">
       <h3 style="color:#041E42;font-size:15px;margin-bottom:8px">🏆 اختيار البطل</h3>
-      <p style="font-size:13px;color:#404D4D;line-height:1.8">اختر الفريق الذي تعتقد أنه سيفوز بكأس العالم. إذا كنت محقاً، تحصل على <strong style="color:#0047BB">+10 نقاط إضافية</strong>. يُقفل هذا الاختيار عند بدء البطولة ولا يمكن تغييره بعد ذلك.</p>
+      <p style="font-size:13px;color:#404D4D;line-height:1.8">اختر الفريق الذي تعتقد أنه سيفوز بكأس العالم. إذا كنت محقاً، تحصل على <strong style="color:#0047BB">+10 نقاط إضافية</strong>. يمكنك تغيير هذا الاختيار في أي وقت حتى بداية دور الـ16، وبعدها يُقفل.</p>
     </div>
 
     <div class="match-card" style="padding:16px">
@@ -1585,6 +1640,47 @@ function renderRules(){
     </div>
   `;
   c.innerHTML = lang==='ar' ? ar : en;
+}
+
+function pickPopularityHTML(mid, homeTeam, awayTeam){
+  // Distribution of all current valid players' predictions for this match.
+  const validNames = new Set(Object.values(state.players)
+    .filter(p=>p.name!=='Admin').map(p=>p.name));
+  let h=0,d=0,a=0,total=0;
+  Object.entries(state.predictions).forEach(([pname,preds])=>{
+    if(!validNames.has(pname)) return;
+    const pr = preds[mid];
+    if(!pr) return;
+    total++;
+    const ph=parseInt(pr.h), pa=parseInt(pr.a);
+    if(ph>pa) h++; else if(pa>ph) a++; else d++;
+  });
+  if(total===0) return '';
+  const pct = n => Math.round(n/total*100);
+  const ar = (lang==='ar');
+  const hLbl = ar?'فوز':'win', dLbl = ar?'تعادل':'draw';
+  // Build a thin distribution bar + a compact legend
+  return `<div class="pick-pop">
+    <div class="barwrap">
+      <div class="bar-h" style="width:${pct(h)}%"></div>
+      <div class="bar-d" style="width:${pct(d)}%"></div>
+      <div class="bar-a" style="width:${pct(a)}%"></div>
+    </div>
+    <div style="margin-top:4px">
+      <span class="seg">👥 ${total} ${ar?'توقّع':'picks'}</span>
+      <span class="seg"><span style="color:#0047BB">●</span> ${homeTeam} ${pct(h)}%</span>
+      <span class="seg"><span style="color:#FFA300">●</span> ${dLbl} ${pct(d)}%</span>
+      <span class="seg"><span style="color:#009FDF">●</span> ${awayTeam} ${pct(a)}%</span>
+    </div>
+  </div>`;
+}
+
+function isTeamEliminated(teamName){
+  // A team counts as eliminated only if the admin has explicitly marked it
+  // (state.eliminated is an optional array). Defaults to NOT eliminated so the
+  // tie-breaker never unfairly penalises anyone when data is absent.
+  if(!state.eliminated || !Array.isArray(state.eliminated)) return false;
+  return state.eliminated.indexOf(teamName) !== -1;
 }
 
 function scoreOneMatch(mid, pred, result){
@@ -1613,29 +1709,53 @@ function renderLeaderboard(){
   const onPublic = document.getElementById('screen-login') && document.getElementById('screen-login').style.display !== 'none';
   const container=document.getElementById(onPublic ? 'pub-lb-container' : 'lb-container') || document.getElementById('lb-container');
   const scores={};
-  Object.values(state.players).forEach(p=>{ if(!(p.isAdmin===true || p.name==='Admin')) scores[p.name]=0; });
+  const exactCount={}; // perfect-score tally per player (tie-breaker + badge)
+  // Only currently-existing, non-admin players appear on the leaderboard
+  const validNames = new Set(Object.values(state.players)
+    .filter(p=>p.name!=='Admin')
+    .map(p=>p.name));
+  validNames.forEach(n=>{ scores[n]=0; exactCount[n]=0; });
   Object.entries(state.results).forEach(([mid,result])=>{
     if(mid==='CHAMPION_LOCKED') return;
     Object.entries(state.predictions).forEach(([pname,preds])=>{
+      if(!validNames.has(pname)) return; // skip deleted/admin players
       const pred=preds[mid];
       if(!pred) return;
       const sc = scoreOneMatch(mid, pred, result);
-      if(sc) scores[pname]=(scores[pname]||0)+sc.points;
+      if(sc){
+        scores[pname]=(scores[pname]||0)+sc.points;
+        if(sc.cls==='exact') exactCount[pname]=(exactCount[pname]||0)+1;
+      }
     });
   });
   if(state.actual_champion){
     Object.entries(state.champion_picks).forEach(([pname,pick])=>{
+      if(!validNames.has(pname)) return;
       if(pick===state.actual_champion) scores[pname]=(scores[pname]||0)+10;
     });
   }
-  const sorted=Object.entries(scores).sort((a,b)=>b[1]-a[1]);
+  // Tie-break: 1) total points, 2) more exact scores, 3) champion pick still alive, 4) name A-Z
+  const championAlive = (pname) => {
+    const pick = state.champion_picks[pname];
+    if(!pick) return 0;
+    if(state.actual_champion) return state.actual_champion===pick ? 1 : 0;
+    return isTeamEliminated(pick) ? 0 : 1;
+  };
+  const sorted=Object.entries(scores).sort((a,b)=>{
+    if(b[1]!==a[1]) return b[1]-a[1];                       // points
+    if((exactCount[b[0]]||0)!==(exactCount[a[0]]||0))      // exact scores
+      return (exactCount[b[0]]||0)-(exactCount[a[0]]||0);
+    const ca=championAlive(a[0]), cb=championAlive(b[0]);
+    if(cb!==ca) return cb-ca;                               // champion still in
+    return a[0].localeCompare(b[0]);                        // stable A-Z
+  });
   const medals=['🥇','🥈','🥉'];
   if(!sorted.length){container.innerHTML=`<p style="color:#939598;font-size:14px;padding:1rem 0">${t('no_players')}</p>`;return;}
   container.innerHTML=sorted.map(([name,pts],i)=>`
-    <div class="lb-row">
+    <div class="lb-row${i<3?' podium podium-'+(i+1):''}">
       <div class="lb-rank">${medals[i]||i+1}</div>
       <div class="lb-name">
-        <div class="name">${name}${(currentUser&&name===currentUser.name)?(lang==='ar'?' <span style="font-size:11px;color:#0047BB">(أنت)</span>':' <span style="font-size:11px;color:#0047BB">(you)</span>'):''}</div>
+        <div class="name">${i===0?'👑 ':''}${name}${(currentUser&&name===currentUser.name)?(lang==='ar'?' <span style="font-size:11px;color:#0047BB">(أنت)</span>':' <span style="font-size:11px;color:#0047BB">(you)</span>'):''}${exactCount[name]>0?` <span class="exact-badge">🎯 ${exactCount[name]}</span>`:''}</div>
         ${state.champion_picks[name]?`<div class="champ">${t('champ_pick')}: ${state.champion_picks[name]}</div>`:''}
       </div>
       <div class="lb-pts">
@@ -1645,8 +1765,107 @@ function renderLeaderboard(){
     </div>`).join('');
 }
 
+function renderAwaitingResults(){
+  const c = document.getElementById('awaiting-results');
+  if(!c) return;
+  const now = new Date();
+  const items = [];
+
+  // Group matches
+  Object.entries(GROUPS).forEach(([g,teams])=>{
+    for(let i=0;i<teams.length;i++) for(let j=i+1;j<teams.length;j++){
+      const mid=`G${g}_${i}_${j}`;
+      if(state.results[mid]) continue; // already has result
+      const schedKey=getScheduleKeyForMatch(mid,teams[i],teams[j]);
+      const iso = schedKey?MATCH_SCHEDULE[schedKey]:null;
+      if(!iso) continue;
+      if(new Date(iso) <= now){ // has kicked off
+        items.push({mid, home:teams[i], away:teams[j], iso, label:`Group ${g}`});
+      }
+    }
+  });
+  // Knockout matches
+  KO_ROUNDS.forEach(r=>{
+    for(let i=0;i<r.matches;i++){
+      const mid=`KO_${r.id}_${i+1}`;
+      if(state.results[mid]) continue;
+      const iso = MATCH_SCHEDULE[mid];
+      if(!iso) continue;
+      if(new Date(iso) <= now){
+        items.push({mid, home:'Team A', away:'Team B', iso, label:`${r.label} · Match ${i+1}`, ko:true});
+      }
+    }
+  });
+
+  // Sort soonest kicked-off first
+  items.sort((a,b)=> new Date(a.iso)-new Date(b.iso));
+
+  if(!items.length){
+    c.innerHTML = `<div class="alert alert-info" style="margin:0">No matches are waiting for a result right now. ✅</div>`;
+    return;
+  }
+
+  c.innerHTML = items.map(it=>{
+    const homeLogo = logoImg(it.home,16);
+    const awayLogo = logoImg(it.away,16);
+    return `<div class="match-card" style="padding:10px 12px">
+      <div class="match-meta">${it.label} · ${riyadhTimeString(it.iso)}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="flex:1;min-width:90px;font-size:13px;font-weight:500;color:#041E42;display:flex;align-items:center;gap:5px">${homeLogo}${it.home}</span>
+        <input type="number" min="0" max="20" id="ar-${it.mid}-h" class="inline-input" style="width:46px;text-align:center;font-size:16px;font-weight:600" inputmode="numeric" oninput="arPenRow('${it.mid}',${it.ko?'true':'false'})"/>
+        <span style="color:#939598">–</span>
+        <input type="number" min="0" max="20" id="ar-${it.mid}-a" class="inline-input" style="width:46px;text-align:center;font-size:16px;font-weight:600" inputmode="numeric" oninput="arPenRow('${it.mid}',${it.ko?'true':'false'})"/>
+        <span style="flex:1;min-width:90px;font-size:13px;font-weight:500;color:#041E42;display:flex;align-items:center;gap:5px;justify-content:flex-end">${it.away}${awayLogo}</span>
+        <button class="btn btn-sm btn-primary" style="width:auto;padding:6px 12px" onclick="arSave('${it.mid}',${it.ko?'true':'false'})">Save</button>
+      </div>
+      ${it.ko?`<div id="ar-${it.mid}-pen" style="display:none;align-items:center;gap:8px;margin-top:8px;padding:8px;background:#FFF3E0;border-radius:8px;border:1px solid #FFA300">
+        <span style="font-size:12px;color:#7A3F00;font-weight:600">🏆 Pen winner:</span>
+        <button class="penalty-btn" id="ar-${it.mid}-penH" onclick="arPen('${it.mid}','H')" style="flex:1">Home</button>
+        <button class="penalty-btn" id="ar-${it.mid}-penA" onclick="arPen('${it.mid}','A')" style="flex:1">Away</button>
+      </div>`:''}
+      <div id="ar-${it.mid}-msg"></div>
+    </div>`;
+  }).join('');
+}
+
+const arPenPicks = {};
+function arPenRow(mid, isKo){
+  if(!isKo) return;
+  const h=parseInt(document.getElementById('ar-'+mid+'-h').value);
+  const a=parseInt(document.getElementById('ar-'+mid+'-a').value);
+  const row=document.getElementById('ar-'+mid+'-pen');
+  if(row){
+    if(!isNaN(h)&&!isNaN(a)&&h===a){ row.style.display='flex'; }
+    else { row.style.display='none'; arPenPicks[mid]=null; }
+  }
+}
+function arPen(mid, team){
+  arPenPicks[mid]=team;
+  const H=document.getElementById('ar-'+mid+'-penH'), A=document.getElementById('ar-'+mid+'-penA');
+  if(H) H.classList.toggle('selected', team==='H');
+  if(A) A.classList.toggle('selected', team==='A');
+}
+async function arSave(mid, isKo){
+  const h=parseInt(document.getElementById('ar-'+mid+'-h').value);
+  const a=parseInt(document.getElementById('ar-'+mid+'-a').value);
+  const msg=document.getElementById('ar-'+mid+'-msg');
+  if(isNaN(h)||isNaN(a)){ if(msg) msg.innerHTML='<div class="alert alert-error" style="margin-top:6px">Enter both scores.</div>'; return; }
+  const result={h,a};
+  if(isKo && h===a){
+    if(arPenPicks[mid]) result.pen=arPenPicks[mid];
+    else { if(msg) msg.innerHTML='<div class="alert alert-warn" style="margin-top:6px">Pick the penalty winner for this draw.</div>'; return; }
+  }
+  state.results[mid]=result;
+  await saveStateToSheet({mergeScope:"admin"});
+  renderLeaderboard();
+  renderAdmin(); // refreshes awaiting list, results-entered list, and player counts
+  renderGroups();
+  renderKnockout();
+}
+
 function renderAdmin(){
   if(!currentUser.isAdmin) return;
+  renderAwaitingResults();
 
   const tbody=document.getElementById('players-tbody');
   const players=Object.values(state.players);
@@ -1685,7 +1904,7 @@ function renderAdmin(){
   // Populate the player-prediction editor dropdowns
   const pePlayer = document.getElementById('pe-player');
   if (pePlayer) {
-    const realPlayers = Object.values(state.players).filter(p=>!(p.isAdmin===true||p.name==='Admin'));
+    const realPlayers = Object.values(state.players).filter(p=>p.name!=='Admin');
     pePlayer.innerHTML = realPlayers.length
       ? realPlayers.map(p=>`<option value="${p.name.replace(/"/g,'&quot;')}">${p.name}</option>`).join('')
       : '<option value="">(no players yet)</option>';
