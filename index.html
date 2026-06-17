@@ -1803,6 +1803,82 @@ function scoreOneMatch(mid, pred, result){
   return {points:pts, label, labelAr, cls, mult};
 }
 
+function matchTeamsFor(mid){
+  if(mid && mid.startsWith('G')){
+    const m = mid.match(/^G([A-L])_(\d+)_(\d+)$/);
+    if(m){ const g=GROUPS[m[1]]; return [g[+m[2]], g[+m[3]]]; }
+  }
+  return null;
+}
+function matchLabelFor(mid){
+  const ar=(lang==='ar');
+  const tm = matchTeamsFor(mid);
+  if(tm) return `${tm[0]} ${ar?'ضد':'vs'} ${tm[1]}`;
+  const r = KO_ROUNDS.find(rr => mid.startsWith('KO_'+rr.id+'_'));
+  const idx = mid.split('_').pop();
+  if(r) return (ar?r.labelAr:r.label) + ' · ' + (ar?'مباراة':'Match') + ' ' + idx;
+  return mid;
+}
+
+function playerBreakdownHTML(pname){
+  // Transparent points record: ONLY matches that already have results.
+  const ar=(lang==='ar');
+  const preds = state.predictions[pname] || {};
+  const rows = [];
+  let total=0, exact=0, correct=0, missed=0;
+  Object.keys(preds).forEach(mid=>{
+    const result = state.results[mid];
+    if(!result) return; // only scored matches
+    const pred = preds[mid];
+    const sc = scoreOneMatch(mid, pred, result);
+    if(!sc) return;
+    total += sc.points;
+    if(sc.cls==='exact') exact++; else if(sc.cls==='result') correct++; else missed++;
+    const tm = matchTeamsFor(mid);
+    const penName = (pen)=> pen==='H'?(tm?tm[0]:'H') : pen==='A'?(tm?tm[1]:'A') : '';
+    const predPen = pred.pen?` <span style="color:#FFA300;font-size:11px">(${ar?'ترجيح':'pen'}: ${penName(pred.pen)})</span>`:'';
+    const resPen = result.pen?` (${ar?'ترجيح':'pen'}: ${result.pen})`:'';
+    rows.push({mid, cls:sc.cls, pts:sc.points, title:matchLabelFor(mid),
+      predStr:`${pred.h}–${pred.a}${predPen}`, resStr:`${result.h}–${result.a}${resPen}`});
+  });
+  // champion bonus line
+  let champLine = '';
+  if(state.actual_champion && state.champion_picks[pname]===state.actual_champion){
+    total += 10;
+    champLine = `<div class="pred-row" style="background:#E8F4FC"><span class="pred-name">🏆 ${ar?'توقّع البطل صحيح':'Correct champion'}</span><span></span><span class="res-chip exact">+10</span></div>`;
+  }
+  // sort: exact → result → miss
+  const rank={exact:0,result:1,miss:2};
+  rows.sort((x,y)=> (rank[x.cls]-rank[y.cls]) || (y.pts-x.pts) || x.title.localeCompare(y.title));
+
+  if(!rows.length && !champLine){
+    return `<div style="font-size:12px;color:#939598;padding:8px 0">${ar?'لا توجد مباريات محسوبة بعد.':'No scored matches yet.'}</div>`;
+  }
+  const summary = `<div style="margin-bottom:8px">
+    <span class="mr-stat" style="margin:0 4px 4px 0;padding:5px 10px"><span class="num" style="font-size:16px">${total}</span><span class="lbl">${ar?'نقاط':'pts'}</span></span>
+    <span class="mr-stat" style="margin:0 4px 4px 0;padding:5px 10px"><span class="num" style="font-size:16px">${exact}</span><span class="lbl">🎯 ${ar?'مطابقة':'exact'}</span></span>
+    <span class="mr-stat" style="margin:0 4px 4px 0;padding:5px 10px"><span class="num" style="font-size:16px">${correct}</span><span class="lbl">${ar?'صحيحة':'correct'}</span></span>
+    <span class="mr-stat" style="margin:0 4px 4px 0;padding:5px 10px"><span class="num" style="font-size:16px">${missed}</span><span class="lbl">${ar?'خطأ':'missed'}</span></span>
+  </div>`;
+  const rowsHtml = rows.map(r=>{
+    let chip = r.cls==='exact'?`<span class="res-chip exact">🎯 +${r.pts}</span>`
+             : r.cls==='result'?`<span class="res-chip result">✓ +${r.pts}</span>`
+             : `<span class="res-chip miss">+0</span>`;
+    return `<div class="pred-row">
+      <span class="pred-name" style="font-weight:400">${r.title}</span>
+      <span class="pred-score" style="font-size:12px">${ar?'توقّع':'pick'} ${r.predStr} · ${ar?'النتيجة':'result'} ${r.resStr}</span>
+      ${chip}
+    </div>`;
+  }).join('');
+  return summary + `<div class="pred-list">${champLine}${rowsHtml}</div>`;
+}
+
+function toggleLbDetail(i){
+  const panel = document.getElementById('lb-detail-'+i);
+  if(!panel) return;
+  panel.style.display = panel.style.display==='none' ? 'block' : 'none';
+}
+
 function renderLeaderboard(){
   // Render into the public container if the public screen is showing, else the main one
   const onPublic = document.getElementById('screen-login') && document.getElementById('screen-login').style.display !== 'none';
@@ -1851,7 +1927,7 @@ function renderLeaderboard(){
   const medals=['🥇','🥈','🥉'];
   if(!sorted.length){container.innerHTML=`<p style="color:#939598;font-size:14px;padding:1rem 0">${t('no_players')}</p>`;return;}
   container.innerHTML=sorted.map(([name,pts],i)=>`
-    <div class="lb-row${i<3?' podium podium-'+(i+1):''}">
+    <div class="lb-row${i<3?' podium podium-'+(i+1):''}" onclick="toggleLbDetail(${i})" style="cursor:pointer">
       <div class="lb-rank">${medals[i]||i+1}</div>
       <div class="lb-name">
         <div class="name">${i===0?'👑 ':''}${name}${(currentUser&&name===currentUser.name)?(lang==='ar'?' <span style="font-size:11px;color:#0047BB">(أنت)</span>':' <span style="font-size:11px;color:#0047BB">(you)</span>'):''}${exactCount[name]>0?` <span class="exact-badge">🎯 ${exactCount[name]}</span>`:''}</div>
@@ -1861,7 +1937,9 @@ function renderLeaderboard(){
         <div class="pts">${pts}</div>
         <div class="label">${t('pts')}</div>
       </div>
-    </div>`).join('');
+      <div class="lb-chevron" style="margin-left:8px;color:#939598;font-size:12px">▾</div>
+    </div>
+    <div id="lb-detail-${i}" class="detail-panel" style="display:none;margin-bottom:6px">${playerBreakdownHTML(name)}</div>`).join('');
 }
 
 function renderAwaitingResults(){
