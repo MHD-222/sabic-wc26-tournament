@@ -67,6 +67,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .pick-pop .bar-h{background:#0047BB}
 .pick-pop .bar-d{background:#FFA300}
 .pick-pop .bar-a{background:#009FDF}
+.detail-toggle{background:#F4F5F6;border:1px solid #C6C8CA;border-radius:8px;font-size:12px;font-weight:600;color:#0047BB;padding:5px 12px;cursor:pointer;font-family:inherit}
+.detail-toggle:hover{background:#E8EEF8}
+.detail-panel{margin-top:8px;padding:10px;background:#FAFBFC;border:1px solid #E6E7E8;border-radius:8px}
+.pred-list{margin-top:8px;display:flex;flex-direction:column;gap:2px}
+.pred-row{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;font-size:13px}
+.pred-row.pred-me{background:#E8EEF8}
+.pred-name{flex:1;color:#041E42;font-weight:500}
+.pred-score{font-weight:700;color:#041E42;font-variant-numeric:tabular-nums}
+.spotlight{margin-top:8px;font-size:12px;background:#E8F4FC;color:#0047BB;border:1px solid #80CFE8;border-radius:8px;padding:6px 10px;line-height:1.5}
 .mr-stat{display:inline-block;text-align:center;padding:8px 14px;background:#fff;border:1px solid #C6C8CA;border-radius:10px;margin:0 6px 6px 0}
 .mr-stat .num{font-size:20px;font-weight:700;color:#0047BB;display:block}
 .mr-stat .lbl{font-size:11px;color:#939598}
@@ -1266,7 +1275,7 @@ function renderGroups(){
         <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="–" inputmode="numeric" ${locked?'disabled':''} oninput="updateWinIndicator('${mid}');togglePenaltyRow('${mid}')"/>
         <span class="team-name right${locked&&!result?' losing':''}" style="display:flex;align-items:center;gap:5px;justify-content:flex-end">${teams[j]} ${logoImg(teams[j],18)}</span>
       </div>
-      ${pickPopularityHTML(mid, teams[i], teams[j])}`;
+      ${matchDetailHTML(mid, teams[i], teams[j], locked, result)}`;
     container.appendChild(card);
     if(saved&&!locked) updateWinIndicator(mid);
   });
@@ -1673,6 +1682,96 @@ function pickPopularityHTML(mid, homeTeam, awayTeam){
       <span class="seg"><span style="color:#009FDF">●</span> ${awayTeam} ${pct(a)}%</span>
     </div>
   </div>`;
+}
+
+function matchDetailHTML(mid, homeTeam, awayTeam, locked, result){
+  // No prediction data is shown until the match locks.
+  if(!locked) return '';
+  const ar = (lang==='ar');
+  const validNames = new Set(Object.values(state.players)
+    .filter(p=>p.name!=='Admin').map(p=>p.name));
+
+  // Gather everyone's prediction for this match
+  const entries = [];
+  Object.entries(state.predictions).forEach(([pname,preds])=>{
+    if(!validNames.has(pname)) return;
+    const pr = preds[mid];
+    if(!pr) return;
+    entries.push({name:pname, h:pr.h, a:pr.a, pen:pr.pen});
+  });
+
+  if(entries.length===0){
+    // Locked but nobody predicted — show a graceful note, still via the toggle
+    const emptyId = 'detail-'+mid;
+    return `<div style="margin-top:8px">
+      <button class="detail-toggle" onclick="toggleDetail('${mid}')">${ar?'عرض التوقعات':'See all predictions'} ▾</button>
+      <div id="${emptyId}" class="detail-panel" style="display:none">
+        <div style="font-size:12px;color:#939598;padding:8px 0">${ar?'لم يتوقّع أحد هذه المباراة.':'No one predicted this match.'}</div>
+      </div>
+    </div>`;
+  }
+
+  // If result is in, classify + sort: exact first, then correct result, then wrong
+  if(result){
+    entries.forEach(e=>{
+      const sc = scoreOneMatch(mid, {h:e.h,a:e.a,pen:e.pen}, result);
+      e.cls = sc ? sc.cls : 'miss';
+      e.pts = sc ? sc.points : 0;
+    });
+    const rank = {exact:0, result:1, miss:2};
+    entries.sort((x,y)=> (rank[x.cls]-rank[y.cls]) || (y.pts-x.pts) || x.name.localeCompare(y.name));
+  } else {
+    entries.sort((x,y)=> x.name.localeCompare(y.name));
+  }
+
+  const penName = (pen) => pen==='H'?homeTeam : pen==='A'?awayTeam : '';
+  const rowsHtml = entries.map(e=>{
+    const isMe = currentUser && e.name===currentUser.name;
+    let chip = '';
+    if(result){
+      if(e.cls==='exact') chip = `<span class="res-chip exact">🎯 +${e.pts}</span>`;
+      else if(e.cls==='result') chip = `<span class="res-chip result">✓ +${e.pts}</span>`;
+      else chip = `<span class="res-chip miss">+0</span>`;
+    }
+    const penStr = e.pen ? ` <span style="color:#FFA300;font-size:11px">(${ar?'ترجيح':'pen'}: ${penName(e.pen)})</span>` : '';
+    return `<div class="pred-row${isMe?' pred-me':''}">
+      <span class="pred-name">${e.name}${isMe?(ar?' (أنت)':' (you)'):''}</span>
+      <span class="pred-score">${e.h}–${e.a}${penStr}</span>
+      ${chip}
+    </div>`;
+  }).join('');
+
+  // Spotlight: who nailed the exact score (only once result is in)
+  let spotlight = '';
+  if(result){
+    const nailed = entries.filter(e=>e.cls==='exact').map(e=>e.name);
+    if(nailed.length){
+      spotlight = `<div class="spotlight">🎯 ${ar?'أصابوا النتيجة بالضبط':'Nailed the exact score'}: <strong>${nailed.join('، ')}</strong></div>`;
+    } else {
+      spotlight = `<div class="spotlight" style="background:#F4F5F6;color:#939598;border-color:#C6C8CA">${ar?'لا أحد أصاب النتيجة بالضبط':'Nobody nailed the exact score'}</div>`;
+    }
+  }
+
+  const detailId = 'detail-'+mid;
+  return `<div style="margin-top:8px">
+    <button class="detail-toggle" onclick="toggleDetail('${mid}')">${ar?'عرض كل التوقعات':'See all predictions'} (${entries.length}) ▾</button>
+    <div id="${detailId}" class="detail-panel" style="display:none">
+      ${pickPopularityHTML(mid, homeTeam, awayTeam)}
+      ${spotlight}
+      <div class="pred-list">${rowsHtml}</div>
+    </div>
+  </div>`;
+}
+
+function toggleDetail(mid){
+  const panel = document.getElementById('detail-'+mid);
+  if(!panel) return;
+  const btn = panel.previousElementSibling;
+  const open = panel.style.display!=='none';
+  panel.style.display = open ? 'none' : 'block';
+  if(btn){
+    btn.innerHTML = btn.innerHTML.replace(open?'▴':'▾', open?'▾':'▴');
+  }
 }
 
 function isTeamEliminated(teamName){
