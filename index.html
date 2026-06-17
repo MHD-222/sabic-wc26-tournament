@@ -1873,8 +1873,8 @@ function playerBreakdownHTML(pname){
   return summary + `<div class="pred-list">${champLine}${rowsHtml}</div>`;
 }
 
-function toggleLbDetail(i){
-  const panel = document.getElementById('lb-detail-'+i);
+function toggleLbDetail(prefix, i){
+  const panel = document.getElementById('lb-detail-'+prefix+'-'+i);
   if(!panel) return;
   panel.style.display = panel.style.display==='none' ? 'block' : 'none';
 }
@@ -1883,6 +1883,7 @@ function renderLeaderboard(){
   // Render into the public container if the public screen is showing, else the main one
   const onPublic = document.getElementById('screen-login') && document.getElementById('screen-login').style.display !== 'none';
   const container=document.getElementById(onPublic ? 'pub-lb-container' : 'lb-container') || document.getElementById('lb-container');
+  const lbPrefix = onPublic ? 'publb' : 'mainlb';
   const scores={};
   const exactCount={}; // perfect-score tally per player (tie-breaker + badge)
   // Only currently-existing, non-admin players appear on the leaderboard
@@ -1927,7 +1928,7 @@ function renderLeaderboard(){
   const medals=['🥇','🥈','🥉'];
   if(!sorted.length){container.innerHTML=`<p style="color:#939598;font-size:14px;padding:1rem 0">${t('no_players')}</p>`;return;}
   container.innerHTML=sorted.map(([name,pts],i)=>`
-    <div class="lb-row${i<3?' podium podium-'+(i+1):''}" onclick="toggleLbDetail(${i})" style="cursor:pointer">
+    <div class="lb-row${i<3?' podium podium-'+(i+1):''}" onclick="toggleLbDetail('${lbPrefix}',${i})" style="cursor:pointer">
       <div class="lb-rank">${medals[i]||i+1}</div>
       <div class="lb-name">
         <div class="name">${i===0?'👑 ':''}${name}${(currentUser&&name===currentUser.name)?(lang==='ar'?' <span style="font-size:11px;color:#0047BB">(أنت)</span>':' <span style="font-size:11px;color:#0047BB">(you)</span>'):''}${exactCount[name]>0?` <span class="exact-badge">🎯 ${exactCount[name]}</span>`:''}</div>
@@ -1939,7 +1940,7 @@ function renderLeaderboard(){
       </div>
       <div class="lb-chevron" style="margin-left:8px;color:#939598;font-size:12px">▾</div>
     </div>
-    <div id="lb-detail-${i}" class="detail-panel" style="display:none;margin-bottom:6px">${playerBreakdownHTML(name)}</div>`).join('');
+    <div id="lb-detail-${lbPrefix}-${i}" class="detail-panel" style="display:none;margin-bottom:6px">${playerBreakdownHTML(name)}</div>`).join('');
 }
 
 function renderAwaitingResults(){
