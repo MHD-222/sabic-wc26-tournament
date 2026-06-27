@@ -334,6 +334,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
 
       <div class="admin-block">
+        <h3>Knockout team overrides</h3>
+        <p style="font-size:12px;color:#939598;margin-bottom:10px">Fill in the TBD third-place slots below. Type the team name exactly and save — the bracket updates instantly for everyone.</p>
+        <div id="ko-overrides-list"></div>
+      </div>
+
+      <div class="admin-block">
         <h3>Results entered</h3>
         <p style="font-size:12px;color:#939598;margin-bottom:10px">All results currently saved. Click Reset to remove a result and re-enter it.</p>
         <div id="results-list"></div>
@@ -790,6 +796,94 @@ const KO_ROUNDS = [
   {id:'F',   label:'Final', labelAr:'النهائي', matches:1, mult:3}
 ];
 
+// ============================================================
+// R32 BRACKET — confirmed team matchups from group stage results.
+// Sources: FIFA official bracket, CBS Sports, Sky Sports (June 27 2026).
+// Matches are in KO_R32_1 through KO_R32_16 order (by date).
+// Third-place slots marked 'TBD-3rd' are filled by admin tomorrow.
+// ============================================================
+const KO_BRACKET = {
+  // ---- R32 (group winner vs runner-up — all confirmed) ----
+  'KO_R32_1':  ['South Africa', 'Canada'],          // M73 Jun 28 — 2A vs 2B
+  'KO_R32_2':  ['Germany', 'Paraguay'],              // M74 Jun 29 — 1E vs TBD-3rd (D/A/B/C/F)
+  'KO_R32_3':  ['Brazil', 'Japan'],                  // M76 Jun 29 — 1C vs 2F
+  'KO_R32_4':  ['Netherlands', 'Morocco'],           // M75 Jun 30 — 1F vs 2C
+  'KO_R32_5':  ['Ivory Coast', 'Norway'],            // M78 Jun 30 — 2E vs 2I
+  'KO_R32_6':  ['France', 'Sweden'],                 // M77 Jun 30 — 1I vs TBD-3rd (F)
+  'KO_R32_7':  ['Mexico', 'TBD-3rd'],               // M79 Jul 1  — 1A vs TBD-3rd (C/E/F/H/I)
+  'KO_R32_8':  ['England', 'TBD-3rd'],              // M80 Jul 1  — 1L vs TBD-3rd (E/H/I/J/K)
+  'KO_R32_9':  ['Belgium', 'TBD-3rd'],              // M82 Jul 1  — 1G vs TBD-3rd (A/E/H/I/J)
+  'KO_R32_10': ['United States', 'Bosnia and Herzegovina'], // M81 Jul 1 — 1D vs TBD-3rd (B confirmed)
+  'KO_R32_11': ['Portugal', 'Ghana'],                // M83 Jul 3  — 2K vs 2L
+  'KO_R32_12': ['Spain', 'Cape Verde'],              // M84 Jul 2  — 1H vs 2J
+  'KO_R32_13': ['Switzerland', 'TBD-3rd'],          // M85 Jul 3  — 1B vs TBD-3rd (E/F/G/I/J)
+  'KO_R32_14': ['Australia', 'Egypt'],               // M88 Jul 3  — 2D vs 2G
+  'KO_R32_15': ['Argentina', 'Algeria'],             // M86 Jul 3  — 1J vs 2H — Cape Verde confirmed 2H
+  'KO_R32_16': ['Colombia', 'TBD-3rd'],             // M87 Jul 4  — 1K vs TBD-3rd (D/E/I/J/L)
+  // ---- R16 (winners of R32 pairs advance to these pre-set slots) ----
+  // R16 bracket tree: W73/W74, W75/W76, W77/W78, W79/W80, W81/W82, W83/W84, W85/W86, W87/W88
+  // Mapped as: R16_1=W(R32_1) vs W(R32_2), R16_2=W(R32_3) vs W(R32_4), etc.
+  // These populate automatically from R32 results — no hardcoding needed.
+};
+
+// Returns [homeTeam, awayTeam] for any KO match.
+// For R32: from the bracket above.
+// For R16+: derived by finding which R32/previous-round match feeds this slot.
+function getKoTeams(mid){
+  const ar = (lang==='ar');
+  const tbd = ar ? 'لم يُحدد' : 'TBD';
+  // Admin overrides take priority (used to fill TBD third-place slots)
+  const ov = state.koOverrides && state.koOverrides[mid];
+  if(ov && ov.home && ov.away) return [ov.home, ov.away];
+  if(ov && ov.home && !ov.away){ const base=KO_BRACKET[mid]; return [ov.home, base?base[1]:tbd]; }
+  if(ov && ov.away && !ov.home){ const base=KO_BRACKET[mid]; return [base?base[0]:tbd, ov.away]; }
+  // Direct bracket lookup (R32 and any manually overridden slots)
+  if(KO_BRACKET[mid]){
+    return KO_BRACKET[mid].map(t => t.startsWith('TBD') ? tbd : t);
+  }
+  // R16: each match is winner of a pair of R32 matches
+  // R16_1 = W(R32_1) vs W(R32_2), R16_2 = W(R32_3) vs W(R32_4), etc.
+  const R16_FEEDS = {
+    'KO_R16_1': ['KO_R32_1','KO_R32_2'],
+    'KO_R16_2': ['KO_R32_3','KO_R32_4'],
+    'KO_R16_3': ['KO_R32_5','KO_R32_6'],
+    'KO_R16_4': ['KO_R32_7','KO_R32_8'],
+    'KO_R16_5': ['KO_R32_9','KO_R32_10'],
+    'KO_R16_6': ['KO_R32_11','KO_R32_12'],
+    'KO_R16_7': ['KO_R32_13','KO_R32_14'],
+    'KO_R16_8': ['KO_R32_15','KO_R32_16'],
+  };
+  const QF_FEEDS = {
+    'KO_QF_1': ['KO_R16_1','KO_R16_2'],
+    'KO_QF_2': ['KO_R16_3','KO_R16_4'],
+    'KO_QF_3': ['KO_R16_5','KO_R16_6'],
+    'KO_QF_4': ['KO_R16_7','KO_R16_8'],
+  };
+  const SF_FEEDS = {
+    'KO_SF_1': ['KO_QF_1','KO_QF_2'],
+    'KO_SF_2': ['KO_QF_3','KO_QF_4'],
+  };
+  const F_FEEDS = {
+    'KO_F_1': ['KO_SF_1','KO_SF_2'],
+  };
+  const feedMap = Object.assign({}, R16_FEEDS, QF_FEEDS, SF_FEEDS, F_FEEDS);
+  const feeds = feedMap[mid];
+  if(!feeds) return [tbd, tbd];
+  return feeds.map(srcMid => {
+    const res = state.results[srcMid];
+    if(!res) return tbd;
+    const [h, a] = getKoTeams(srcMid); // recursive
+    if(h===tbd || a===tbd) return tbd;
+    // Determine winner: by score, or penalty winner if draw
+    const rh=res.h, ra=res.a;
+    if(rh>ra) return h;
+    if(ra>rh) return a;
+    if(res.pen==='H') return h;
+    if(res.pen==='A') return a;
+    return tbd; // draw but no pen recorded yet
+  });
+}
+
 const TEAM_FLAGS = {
   'Mexico':'🇲🇽','South Africa':'🇿🇦','South Korea':'🇰🇷','Czech Republic':'🇨🇿',
   'Canada':'🇨🇦','Bosnia and Herzegovina':'🇧🇦','Qatar':'🇶🇦','Switzerland':'🇨🇭',
@@ -893,6 +987,7 @@ async function loadStateFromSheet() {
       if (!state.standings) state.standings = {};
       if (!state.fixtures) state.fixtures = {};
       if (!state.apiMeta) state.apiMeta = { lastStatic: null, lastLive: null, seasonOK: null };
+      if (!state.koOverrides) state.koOverrides = {};
     } else {
       setDefaultState();
     }
@@ -960,6 +1055,7 @@ async function saveStateToSheet(opts) {
           merged.champion_picks = mergedPicks;
           // API-sourced data is admin-owned too
           merged.teamLogos = state.teamLogos || merged.teamLogos || {};
+          merged.koOverrides = Object.assign({}, merged.koOverrides||{}, state.koOverrides||{});
           merged.standings = state.standings || merged.standings || {};
           merged.fixtures = state.fixtures || merged.fixtures || {};
           merged.apiMeta = state.apiMeta || merged.apiMeta || {};
@@ -1009,7 +1105,8 @@ function setDefaultState() {
     teamLogos: {},
     standings: {},
     fixtures: {},
-    apiMeta: { lastStatic: null, lastLive: null, seasonOK: null }
+    apiMeta: { lastStatic: null, lastLive: null, seasonOK: null },
+    koOverrides: {}
   };
 }
 
@@ -1299,6 +1396,9 @@ function renderKnockout(){
       const koCountdown = formatCountdown(getTimeUntilLock(mid));
       const card=document.createElement('div');
       card.className='match-card'+(saved?' has-prediction':'')+(result?' has-result':'');
+      const [koHome, koAway] = getKoTeams(mid);
+      const tbdHome = (koHome === (lang==='ar'?'لم يُحدد':'TBD'));
+      const tbdAway = (koAway === (lang==='ar'?'لم يُحدد':'TBD'));
       card.innerHTML=`
         <div class="match-meta">
           ${lang==='ar'?round.labelAr:round.label} · ${lang==='ar'?'مباراة':'Match'} ${i+1}
@@ -1308,20 +1408,20 @@ function renderKnockout(){
           ${!koLocked&&MATCH_SCHEDULE[mid]?`<span class="countdown-label" data-countdown-key="${mid}" data-match-id="${mid}" style="font-size:11px;color:#939598;margin-left:auto">${koCountdown}</span>`:''}
         </div>
         <div class="match-row">
-          <span class="team-name" style="color:#939598">${lang==='ar'?'لم يُحدد':'TBD'}</span>
+          <span class="team-name${tbdHome?' ':' '}" style="${tbdHome?'color:#939598':'color:#041E42'};display:flex;align-items:center;gap:5px">${logoImg(koHome,18)} ${koHome}</span>
           <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="–" inputmode="numeric" ${koLocked?'disabled':''} oninput="updateWinIndicator('${mid}');togglePenaltyRow('${mid}')"/>
           <span class="vs">${lang==='ar'?'ضد':'vs'}</span>
           <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="–" inputmode="numeric" ${koLocked?'disabled':''} oninput="updateWinIndicator('${mid}');togglePenaltyRow('${mid}')"/>
-          <span class="team-name right" style="color:#939598">${lang==='ar'?'لم يُحدد':'TBD'}</span>
+          <span class="team-name right${tbdAway?' ':' '}" style="${tbdAway?'color:#939598':'color:#041E42'};display:flex;align-items:center;gap:5px;justify-content:flex-end">${koAway} ${logoImg(koAway,18)}</span>
         </div>
         <div class="penalty-row" id="${mid}_pen_row" style="display:${isDraw?'flex':'none'}">
           <span class="penalty-label">🏆 ${lang==='ar'?'الفائز بركلات الترجيح:':'Penalty winner:'}</span>
           <button class="penalty-btn${saved&&saved.pen==='H'?' selected':''}" id="${mid}_pen_H" onclick="selectPenalty('${mid}','H')" ${koLocked?'disabled':''}>
-            ${lang==='ar'?'الفريق الأول':'Team A (left)'}</button>
+            ${tbdHome?(lang==='ar'?'الفريق الأول':'Team A'):koHome}</button>
           <button class="penalty-btn${saved&&saved.pen==='A'?' selected':''}" id="${mid}_pen_A" onclick="selectPenalty('${mid}','A')" ${koLocked?'disabled':''}>
-
-            ${lang==='ar'?'الفريق الثاني':'Team B (right)'}</button>
-        </div>`;
+            ${tbdAway?(lang==='ar'?'الفريق الثاني':'Team B'):koAway}</button>
+        </div>
+        ${matchDetailHTML(mid, koHome, koAway, koLocked, result)}`;
       container.appendChild(card);
     }
   });
@@ -2041,9 +2141,66 @@ async function arSave(mid, isKo){
   renderKnockout();
 }
 
+function renderKoOverrides(){
+  const c = document.getElementById('ko-overrides-list');
+  if(!c) return;
+  // Show only slots that currently have TBD in them
+  const tbd = 'TBD';
+  const slots = Object.entries(KO_BRACKET).filter(([mid, teams])=>
+    teams.some(t => t.startsWith('TBD'))
+  );
+  if(!slots.length){
+    c.innerHTML = `<div class="alert alert-success" style="margin:0">✓ All R32 slots are filled.</div>`;
+    return;
+  }
+  c.innerHTML = slots.map(([mid, teams]) => {
+    const ov = state.koOverrides && state.koOverrides[mid] ? state.koOverrides[mid] : {};
+    const homeIsKnown = !teams[0].startsWith('TBD');
+    const awayIsKnown = !teams[1].startsWith('TBD');
+    const homeVal = ov.home || (homeIsKnown ? teams[0] : '');
+    const awayVal = ov.away || (awayIsKnown ? teams[1] : '');
+    return `<div class="match-card" style="padding:10px 12px;margin-bottom:6px">
+      <div class="match-meta" style="font-size:12px">${mid}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        ${homeIsKnown
+          ? `<span style="flex:1;font-size:13px;font-weight:600;color:#041E42">${teams[0]}</span>`
+          : `<input type="text" id="kov-${mid}-h" value="${homeVal}" placeholder="Home team" class="inline-input" style="flex:1;min-width:100px;font-size:13px"/>`}
+        <span style="color:#939598;font-size:12px">vs</span>
+        ${awayIsKnown
+          ? `<span style="flex:1;font-size:13px;font-weight:600;color:#041E42">${teams[1]}</span>`
+          : `<input type="text" id="kov-${mid}-a" value="${awayVal}" placeholder="Away team" class="inline-input" style="flex:1;min-width:100px;font-size:13px"/>`}
+        <button class="btn btn-sm btn-primary" style="width:auto" onclick="saveKoOverride('${mid}',${homeIsKnown},${awayIsKnown})">Save</button>
+      </div>
+      <div id="kov-${mid}-msg" style="font-size:12px;margin-top:4px"></div>
+    </div>`;
+  }).join('');
+}
+
+async function saveKoOverride(mid, homeIsKnown, awayIsKnown){
+  const msg = document.getElementById('kov-'+mid+'-msg');
+  if(!state.koOverrides) state.koOverrides = {};
+  const curr = state.koOverrides[mid] || {};
+  if(!homeIsKnown){
+    const v = document.getElementById('kov-'+mid+'-h').value.trim();
+    if(!v){ if(msg) msg.innerHTML='<span style="color:#E35205">Enter the home team name.</span>'; return; }
+    curr.home = v;
+  }
+  if(!awayIsKnown){
+    const v = document.getElementById('kov-'+mid+'-a').value.trim();
+    if(!v){ if(msg) msg.innerHTML='<span style="color:#E35205">Enter the away team name.</span>'; return; }
+    curr.away = v;
+  }
+  state.koOverrides[mid] = curr;
+  await saveStateToSheet({mergeScope:"admin"});
+  if(msg) msg.innerHTML='<span style="color:#1D9E75">✓ Saved.</span>';
+  renderKnockout();
+  renderKoOverrides();
+}
+
 function renderAdmin(){
   if(!currentUser.isAdmin) return;
   renderAwaitingResults();
+  renderKoOverrides();
 
   const tbody=document.getElementById('players-tbody');
   const players=Object.values(state.players);
