@@ -67,6 +67,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .pick-pop .bar-h{background:#0047BB}
 .pick-pop .bar-d{background:#FFA300}
 .pick-pop .bar-a{background:#009FDF}
+.advance-row{margin-top:8px;padding:8px 10px;border-radius:8px;border:1px solid #E6E7E8;background:#FAFBFC;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px}
+.advance-row.irrelevant{opacity:0.45;border-style:dashed}
+.advance-row.active{border-color:#FFA300;background:#FFF8EC}
+.advance-btn{flex:1;padding:5px 10px;border-radius:6px;border:1.5px solid #C6C8CA;background:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:#404D4D;transition:all .15s}
+.advance-btn:hover:not(:disabled){border-color:#0047BB;color:#0047BB}
+.advance-btn.selected{border-color:#0047BB;background:#E8EEF8;color:#0047BB}
+.advance-btn.correct{border-color:#1D9E75;background:#E6F7F0;color:#1D9E75}
+.advance-btn.wrong{border-color:#C53A00;background:#FDEEE8;color:#C53A00;opacity:0.7}
+.advance-label{font-size:11px;color:#939598;white-space:nowrap}
 .detail-toggle{background:#F4F5F6;border:1px solid #C6C8CA;border-radius:8px;font-size:12px;font-weight:600;color:#0047BB;padding:5px 12px;cursor:pointer;font-family:inherit}
 .detail-toggle:hover{background:#E8EEF8}
 .detail-panel{margin-top:8px;padding:10px;background:#FAFBFC;border:1px solid #E6E7E8;border-radius:8px}
@@ -988,6 +997,7 @@ async function loadStateFromSheet() {
       if (!state.fixtures) state.fixtures = {};
       if (!state.apiMeta) state.apiMeta = { lastStatic: null, lastLive: null, seasonOK: null };
       if (!state.koOverrides) state.koOverrides = {};
+      if (!state.advance_picks) state.advance_picks = {};
     } else {
       setDefaultState();
     }
@@ -1025,6 +1035,11 @@ async function saveStateToSheet(opts) {
           }
           if (state.champion_picks[currentUser.name] !== undefined) {
             merged.champion_picks[currentUser.name] = state.champion_picks[currentUser.name];
+          }
+          // Preserve this player's advance picks
+          merged.advance_picks = merged.advance_picks || {};
+          if (state.advance_picks && state.advance_picks[currentUser.name]) {
+            merged.advance_picks[currentUser.name] = state.advance_picks[currentUser.name];
           }
           // Make sure this player exists in the merged player list
           if (!merged.players[currentUser.name] && state.players[currentUser.name]) {
@@ -1106,7 +1121,8 @@ function setDefaultState() {
     standings: {},
     fixtures: {},
     apiMeta: { lastStatic: null, lastLive: null, seasonOK: null },
-    koOverrides: {}
+    koOverrides: {},
+    advance_picks: {}
   };
 }
 
@@ -1399,27 +1415,65 @@ function renderKnockout(){
       const [koHome, koAway] = getKoTeams(mid);
       const tbdHome = (koHome === (lang==='ar'?'لم يُحدد':'TBD'));
       const tbdAway = (koAway === (lang==='ar'?'لم يُحدد':'TBD'));
+      const ar = (lang==='ar');
+      // Advance pick — independent of score prediction
+      const myAdvance = (state.advance_picks&&state.advance_picks[currentUser.name])
+        ? state.advance_picks[currentUser.name][mid] : null;
+      // Score the advance pick if there's a result
+      const asc = result ? scoreAdvancePick(mid, myAdvance, result) : null;
+      // Visual state for advance row
+      const rIsDraw = result && result.h===result.a;
+      const advanceLabel = ar ? '🏆 من يتأهل؟ (تفعّل فقط إذا صار تعادل وركلات ترجيح)' : '🏆 Who advances? (only counts if it goes to penalties)';
+      let advanceRowClass = 'advance-row';
+      let advanceNote = '';
+      if(result && !rIsDraw){
+        // clear winner — pick is irrelevant
+        advanceRowClass += ' irrelevant';
+        advanceNote = `<span style="font-size:11px;color:#939598;margin-left:auto">${ar?'لا ركلات — هذا التوقع لا يُحتسب':'No penalties — this pick didn\'t count'}</span>`;
+      } else if(result && rIsDraw && asc){
+        // went to penalties — pick is active
+        advanceRowClass += ' active';
+        advanceNote = asc.correct
+          ? `<span style="font-size:11px;color:#1D9E75;margin-left:auto;font-weight:700">✓ +1 ${ar?'نقطة':'pt'}</span>`
+          : `<span style="font-size:11px;color:#C53A00;margin-left:auto;font-weight:700">${ar?'اختيار خاطئ':'Wrong pick'} +0</span>`;
+      }
+      // Build advance button classes
+      const homeCls = () => {
+        if(!myAdvance) return 'advance-btn';
+        if(myAdvance!=='H') return 'advance-btn';
+        if(asc&&asc.active) return asc.correct?'advance-btn selected correct':'advance-btn selected wrong';
+        return 'advance-btn selected';
+      };
+      const awayCls = () => {
+        if(!myAdvance) return 'advance-btn';
+        if(myAdvance!=='A') return 'advance-btn';
+        if(asc&&asc.active) return asc.correct?'advance-btn selected correct':'advance-btn selected wrong';
+        return 'advance-btn selected';
+      };
       card.innerHTML=`
         <div class="match-meta">
-          ${lang==='ar'?round.labelAr:round.label} · ${lang==='ar'?'مباراة':'Match'} ${i+1}
-          ${result?`<span class="badge badge-result">${lang==='ar'?'النتيجة':'Result'}: ${result.h}–${result.a}${result.pen?' (pen: '+result.pen+')':''}</span>`:''}
-          ${koLocked&&!result?`<span class="badge badge-locked">🔒 ${lang==='ar'?'مُقفل':'Locked'}</span>`:''}
-          ${saved&&!result&&!koLocked?`<span class="badge badge-saved">${lang==='ar'?'محفوظ':'Saved'}</span>`:''}
+          ${ar?round.labelAr:round.label} · ${ar?'مباراة':'Match'} ${i+1}
+          ${result?`<span class="badge badge-result">${ar?'النتيجة':'Result'}: ${result.h}–${result.a}${result.pen?' (pen: '+result.pen+')':''}</span>`:''}
+          ${koLocked&&!result?`<span class="badge badge-locked">🔒 ${ar?'مُقفل':'Locked'}</span>`:''}
+          ${saved&&!result&&!koLocked?`<span class="badge badge-saved">${ar?'محفوظ':'Saved'}</span>`:''}
           ${!koLocked&&MATCH_SCHEDULE[mid]?`<span class="countdown-label" data-countdown-key="${mid}" data-match-id="${mid}" style="font-size:11px;color:#939598;margin-left:auto">${koCountdown}</span>`:''}
         </div>
         <div class="match-row">
-          <span class="team-name${tbdHome?' ':' '}" style="${tbdHome?'color:#939598':'color:#041E42'};display:flex;align-items:center;gap:5px">${logoImg(koHome,18)} ${koHome}</span>
-          <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="–" inputmode="numeric" ${koLocked?'disabled':''} oninput="updateWinIndicator('${mid}');togglePenaltyRow('${mid}')"/>
-          <span class="vs">${lang==='ar'?'ضد':'vs'}</span>
-          <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="–" inputmode="numeric" ${koLocked?'disabled':''} oninput="updateWinIndicator('${mid}');togglePenaltyRow('${mid}')"/>
-          <span class="team-name right${tbdAway?' ':' '}" style="${tbdAway?'color:#939598':'color:#041E42'};display:flex;align-items:center;gap:5px;justify-content:flex-end">${koAway} ${logoImg(koAway,18)}</span>
+          <span class="team-name" style="${tbdHome?'color:#939598':'color:#041E42'};display:flex;align-items:center;gap:5px">${logoImg(koHome,18)} ${koHome}</span>
+          <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="–" inputmode="numeric" ${koLocked?'disabled':''} oninput="updateWinIndicator('${mid}')"/>
+          <span class="vs">${ar?'ضد':'vs'}</span>
+          <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="–" inputmode="numeric" ${koLocked?'disabled':''} oninput="updateWinIndicator('${mid}')"/>
+          <span class="team-name right" style="${tbdAway?'color:#939598':'color:#041E42'};display:flex;align-items:center;gap:5px;justify-content:flex-end">${koAway} ${logoImg(koAway,18)}</span>
         </div>
-        <div class="penalty-row" id="${mid}_pen_row" style="display:${isDraw?'flex':'none'}">
-          <span class="penalty-label">🏆 ${lang==='ar'?'الفائز بركلات الترجيح:':'Penalty winner:'}</span>
-          <button class="penalty-btn${saved&&saved.pen==='H'?' selected':''}" id="${mid}_pen_H" onclick="selectPenalty('${mid}','H')" ${koLocked?'disabled':''}>
-            ${tbdHome?(lang==='ar'?'الفريق الأول':'Team A'):koHome}</button>
-          <button class="penalty-btn${saved&&saved.pen==='A'?' selected':''}" id="${mid}_pen_A" onclick="selectPenalty('${mid}','A')" ${koLocked?'disabled':''}>
-            ${tbdAway?(lang==='ar'?'الفريق الثاني':'Team B'):koAway}</button>
+        <div class="${advanceRowClass}">
+          <span class="advance-label">${advanceLabel}</span>
+          <button class="${homeCls()}" id="${mid}_adv_H" onclick="selectAdvance('${mid}','H')" ${koLocked?'disabled':''}>
+            ${tbdHome?(ar?'الفريق الأول':'Team A'):koHome}
+          </button>
+          <button class="${awayCls()}" id="${mid}_adv_A" onclick="selectAdvance('${mid}','A')" ${koLocked?'disabled':''}>
+            ${tbdAway?(ar?'الفريق الثاني':'Team B'):koAway}
+          </button>
+          ${advanceNote}
         </div>
         ${matchDetailHTML(mid, koHome, koAway, koLocked, result)}`;
       container.appendChild(card);
@@ -1670,7 +1724,7 @@ function renderRules(){
 
     <div class="match-card" style="padding:16px">
       <h3 style="color:#041E42;font-size:15px;margin-bottom:8px">⚔️ Knockout stage scoring</h3>
-      <p style="font-size:13px;color:#404D4D;line-height:1.6;margin-bottom:8px">Scores are based on the full match final score, including extra time. Point values increase in the later rounds:</p>
+      <p style="font-size:13px;color:#404D4D;line-height:1.6;margin-bottom:8px">Scores are based on the full match final score, including extra time. Penalty shootouts do not affect the score prediction — a 1–1 draw is a 1–1 draw regardless of what happens on penalties. Point values increase in the later rounds:</p>
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         <tr style="border-bottom:0.5px solid #E6E7E8"><td style="padding:6px 0;color:#404D4D">Round of 32 &amp; Round of 16</td><td style="text-align:right;font-weight:700;color:#0047BB">×1</td></tr>
         <tr style="border-bottom:0.5px solid #E6E7E8"><td style="padding:6px 0;color:#404D4D">Quarter-finals</td><td style="text-align:right;font-weight:700;color:#FFA300">×2</td></tr>
@@ -1883,24 +1937,37 @@ function isTeamEliminated(teamName){
 }
 
 function scoreOneMatch(mid, pred, result){
-  // Returns {points, label, labelAr, cls} for a single predicted match against its result.
+  // Scores a prediction against a result.
+  // Penalties are IGNORED for score predictions — we score on 90+ET final score only.
+  // The separate "who advances" pick is handled by scoreAdvancePick().
   if(!pred || !result) return null;
   let mult=1;
   if(mid.includes('KO_QF')) mult=2;
   if(mid.includes('KO_SF')||mid.includes('KO_F_')) mult=3;
   const pH=parseInt(pred.h), pA=parseInt(pred.a), rH=result.h, rA=result.a;
-  let actualWinner = rH>rA?'H':rH<rA?'A':'D';
-  if(actualWinner==='D'&&result.pen) actualWinner=result.pen;
-  let predWinner = pH>pA?'H':pH<pA?'A':'D';
-  if(predWinner==='D'&&pred.pen) predWinner=pred.pen;
-  const exactScore = pH===rH && pA===rA;
-  const exactPen = !result.pen || pred.pen===result.pen;
+  // Actual outcome: based purely on score (draw = draw, even if it went to pens)
+  const actualOutcome = rH>rA?'H':rH<rA?'A':'D';
+  const predOutcome   = pH>pA?'H':pH<pA?'A':'D';
+  const exactScore    = pH===rH && pA===rA;
   let pts=0, label='Missed', labelAr='خطأ', cls='miss';
-  if(exactScore && exactPen){ pts=3*mult; label='Exact score!'; labelAr='نتيجة مطابقة!'; cls='exact'; }
-  else if(predWinner!=='D' && predWinner===actualWinner){ pts=1*mult; label='Correct result'; labelAr='النتيجة صحيحة'; cls='result'; }
-  else if(predWinner==='D' && exactScore && !exactPen){ pts=1*mult; label='Right score, wrong pens'; labelAr='النتيجة صحيحة، الترجيح خطأ'; cls='result'; }
-  else if(predWinner===actualWinner){ pts=1*mult; label='Correct result'; labelAr='النتيجة صحيحة'; cls='result'; }
+  if(exactScore){
+    pts=3*mult; label='Exact score!'; labelAr='نتيجة مطابقة!'; cls='exact';
+  } else if(predOutcome===actualOutcome){
+    pts=1*mult; label='Correct result'; labelAr='النتيجة صحيحة'; cls='result';
+  }
   return {points:pts, label, labelAr, cls, mult};
+}
+
+function scoreAdvancePick(mid, advancePick, result){
+  // Scores the separate "who advances?" pick. +1 only if:
+  // — the match result is a draw (went to penalties)
+  // — and the player's pick matches the actual penalty winner
+  if(!advancePick || !result) return {points:0, active:false};
+  const rH=result.h, rA=result.a;
+  const isDraw = rH===rA;
+  if(!isDraw || !result.pen) return {points:0, active:false}; // no penalties — pick irrelevant
+  const correct = advancePick===result.pen;
+  return {points: correct?1:0, active:true, correct};
 }
 
 function matchTeamsFor(mid){
@@ -1934,6 +2001,12 @@ function playerBreakdownHTML(pname){
     if(!sc) return;
     total += sc.points;
     if(sc.cls==='exact') exact++; else if(sc.cls==='result') correct++; else missed++;
+    // Add advance pick bonus if applicable
+    if(mid.startsWith('KO_')){
+      const ap = (state.advance_picks&&state.advance_picks[pname]) ? state.advance_picks[pname][mid] : null;
+      const asc = scoreAdvancePick(mid, ap, result);
+      if(asc.active) total += asc.points;
+    }
     const tm = matchTeamsFor(mid);
     const penName = (pen)=> pen==='H'?(tm?tm[0]:'H') : pen==='A'?(tm?tm[1]:'A') : '';
     const predPen = pred.pen?` <span style="color:#FFA300;font-size:11px">(${ar?'ترجيح':'pen'}: ${penName(pred.pen)})</span>`:'';
@@ -2001,6 +2074,12 @@ function renderLeaderboard(){
       if(sc){
         scores[pname]=(scores[pname]||0)+sc.points;
         if(sc.cls==='exact') exactCount[pname]=(exactCount[pname]||0)+1;
+      }
+      // "Who advances" pick — stored as state.advance_picks[pname][mid]
+      if(mid.startsWith('KO_')){
+        const ap = (state.advance_picks&&state.advance_picks[pname])?state.advance_picks[pname][mid]:null;
+        const asc = scoreAdvancePick(mid, ap, result);
+        if(asc.active) scores[pname]=(scores[pname]||0)+asc.points;
       }
     });
   });
@@ -2343,13 +2422,6 @@ async function saveCurrentTab(){
         const a=document.getElementById(mid+'_a');
         if(h&&h.value!==''&&a&&a.value!==''){
           const pred={h:parseInt(h.value),a:parseInt(a.value)};
-          // capture penalty pick if it's a draw
-          if(pred.h===pred.a){
-            const penH=document.getElementById(mid+'_pen_H');
-            const penA=document.getElementById(mid+'_pen_A');
-            if(penH&&penH.classList.contains('selected')) pred.pen='H';
-            else if(penA&&penA.classList.contains('selected')) pred.pen='A';
-          }
           preds[mid]=pred;
         }
       }
@@ -2490,10 +2562,7 @@ function updateCountdownsInPlace() {
         const a = document.getElementById(mid + '_a');
         if (h && !h.disabled) h.disabled = true;
         if (a && !a.disabled) a.disabled = true;
-        const penH = document.getElementById(mid + '_pen_H');
-        const penA = document.getElementById(mid + '_pen_A');
-        if (penH) penH.disabled = true;
-        if (penA) penA.disabled = true;
+
       }
       el.textContent = '🔒 Locked';
       el.className = 'badge badge-locked';
