@@ -1172,7 +1172,11 @@ function doLogin(){
   renderKnockout();
   renderChampion();
   const seeded = seedGroupResults();
-  if(seeded > 0) saveStateToSheet({mergeScope:'admin'});
+  // Only admin triggers a save when seeding results — regular players seed locally
+  // but must NOT do an admin-scope save as it risks overwriting other players' data.
+  if(seeded > 0 && currentUser && currentUser.isAdmin){
+    saveStateToSheet({mergeScope:'admin'});
+  }
   renderLeaderboard();
   renderRules();
   if(currentUser.isAdmin) renderAdmin();
@@ -1499,13 +1503,45 @@ function renderKnockout(){
   const container=document.getElementById('knockout-container');
   container.innerHTML='';
   const userPreds=state.predictions[currentUser.name]||{};
+  // Build all KO matches as a flat list, sort by kickoff time (Riyadh = UTC+3)
+  const koMatches = [];
   KO_ROUNDS.forEach(round=>{
-    const rh=document.createElement('div');
-    rh.className='round-header';
-    rh.innerHTML=`<span class="group-label" style="margin:0">${lang==='ar'?round.labelAr:round.label}</span>${round.mult>1?`<span class="round-mult">×${round.mult} points</span>`:''}`;
-    container.appendChild(rh);
     for(let i=0;i<round.matches;i++){
       const mid=`KO_${round.id}_${i+1}`;
+      const iso = MATCH_SCHEDULE[mid] || null;
+      koMatches.push({round, mid, iso, idx:i});
+    }
+  });
+  koMatches.sort((a,b)=>{
+    if(!a.iso && !b.iso) return 0;
+    if(!a.iso) return 1;
+    if(!b.iso) return -1;
+    // Sort by Riyadh time (UTC+3) so day headers match display
+    return (new Date(a.iso).getTime() + RIYADH_OFFSET*3600000)
+         - (new Date(b.iso).getTime() + RIYADH_OFFSET*3600000);
+  });
+
+  let lastKoRound = null;
+  let lastKoDay = null;
+  koMatches.forEach(({round, mid, iso, idx: i})=>{
+    // Day header (same pattern as Groups tab)
+    const dayLabel = iso ? riyadhTimeString(iso).split(',')[0] : (lang==='ar'?'موعد غير محدد':'Date TBD');
+    if(dayLabel !== lastKoDay){
+      const dh=document.createElement('div');
+      dh.className='group-label';
+      dh.style.marginTop='1.25rem';
+      dh.textContent=dayLabel;
+      container.appendChild(dh);
+      lastKoDay=dayLabel;
+    }
+    // Round header — only when round changes
+    if(round.id !== lastKoRound){
+      const rh=document.createElement('div');
+      rh.className='round-header';
+      rh.innerHTML=`<span class="group-label" style="margin:0">${lang==='ar'?round.labelAr:round.label}</span>${round.mult>1?`<span class="round-mult">×${round.mult} points</span>`:''}`;
+      container.appendChild(rh);
+      lastKoRound=round.id;
+    }
       const saved=userPreds[mid];
       const result=state.results[mid];
       const isDraw = saved && saved.h!==undefined && saved.a!==undefined && parseInt(saved.h)===parseInt(saved.a);
@@ -1578,7 +1614,6 @@ function renderKnockout(){
         </div>
         ${matchDetailHTML(mid, koHome, koAway, koLocked, result)}`;
       container.appendChild(card);
-    }
   });
 }
 
