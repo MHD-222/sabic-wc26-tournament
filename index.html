@@ -323,10 +323,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         </div>
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
           <span style="font-size:13px;color:#404D4D;min-width:90px;text-align:right" id="res-home-lbl">Home</span>
-          <input type="number" id="res-h" min="0" max="20" value="0" class="inline-input" style="width:55px;text-align:center;font-size:18px;font-weight:600"/>
+          <input type="number" id="res-h" min="0" max="20" value="0" class="inline-input" style="width:55px;text-align:center;font-size:18px;font-weight:600" oninput="toggleAdminPenalty()"/>
           <span style="color:#939598;font-size:16px">–</span>
-          <input type="number" id="res-a" min="0" max="20" value="0" class="inline-input" style="width:55px;text-align:center;font-size:18px;font-weight:600"/>
+          <input type="number" id="res-a" min="0" max="20" value="0" class="inline-input" style="width:55px;text-align:center;font-size:18px;font-weight:600" oninput="toggleAdminPenalty()"/>
           <span style="font-size:13px;color:#404D4D;min-width:90px" id="res-away-lbl">Away</span>
+        </div>
+        <div id="admin-pen-row" style="display:none;align-items:center;gap:8px;margin-bottom:12px;padding:10px;background:#FFF8EC;border-radius:8px;border:1px solid #FFA300">
+          <span style="font-size:12px;color:#7A3F00;font-weight:600">🏆 Penalty winner:</span>
+          <button class="penalty-btn" id="admin-pen-H" onclick="selectAdminPenalty('H')" style="flex:1" id="admin-pen-H-btn">Home</button>
+          <button class="penalty-btn" id="admin-pen-A" onclick="selectAdminPenalty('A')" style="flex:1" id="admin-pen-A-btn">Away</button>
+          <span style="font-size:11px;color:#939598">(required for drawn KO matches)</span>
         </div>
         <button class="btn btn-sm btn-primary" onclick="submitResult()" id="btn-result">Save result</button>
         <div id="result-msg" style="margin-top:10px"></div>
@@ -853,14 +859,15 @@ function getKoTeams(mid){
   // R16: each match is winner of a pair of R32 matches
   // R16_1 = W(R32_1) vs W(R32_2), R16_2 = W(R32_3) vs W(R32_4), etc.
   const R16_FEEDS = {
-    'KO_R16_1': ['KO_R32_1','KO_R32_2'],
-    'KO_R16_2': ['KO_R32_3','KO_R32_4'],
-    'KO_R16_3': ['KO_R32_5','KO_R32_6'],
-    'KO_R16_4': ['KO_R32_7','KO_R32_8'],
-    'KO_R16_5': ['KO_R32_9','KO_R32_10'],
-    'KO_R16_6': ['KO_R32_11','KO_R32_12'],
-    'KO_R16_7': ['KO_R32_13','KO_R32_14'],
-    'KO_R16_8': ['KO_R32_15','KO_R32_16'],
+    // Verified against Sky Sports match numbers M89-M96 (June 28 2026)
+    'KO_R16_1': ['KO_R32_1','KO_R32_4'],   // M90: W(SA/Can) vs W(Ned/Mor)
+    'KO_R16_2': ['KO_R32_2','KO_R32_6'],   // M89: W(Ger/Par) vs W(Fra/Swe)
+    'KO_R16_3': ['KO_R32_3','KO_R32_5'],   // M91: W(Bra/Jap) vs W(Ivo/Nor)
+    'KO_R16_4': ['KO_R32_7','KO_R32_8'],   // M92: W(Mex/Ecu) vs W(Eng/DRC)
+    'KO_R16_5': ['KO_R32_10','KO_R32_9'],  // M93: W(USA/Bos) vs W(Bel/Sen)
+    'KO_R16_6': ['KO_R32_11','KO_R32_12'], // M94: W(Por/Cro) vs W(Esp/Aut)
+    'KO_R16_7': ['KO_R32_15','KO_R32_14'], // M95: W(Arg/CPV) vs W(Aus/Egy)
+    'KO_R16_8': ['KO_R32_13','KO_R32_16'], // M96: W(Swi/Alg) vs W(Col/Gha)
   };
   const QF_FEEDS = {
     'KO_QF_1': ['KO_R16_1','KO_R16_2'],
@@ -1412,12 +1419,14 @@ function renderGroups(){
       }
     }
   });
-  // Sort chronologically; matches with no time go last
+  // Sort chronologically by Riyadh time (UTC+3) so day headers match display order
+  // Using UTC milliseconds + 3h offset for sort; keeps concurrent matches together correctly
   matches.sort((a,b)=>{
     if(!a.kickoffIso && !b.kickoffIso) return 0;
     if(!a.kickoffIso) return 1;
     if(!b.kickoffIso) return -1;
-    return new Date(a.kickoffIso) - new Date(b.kickoffIso);
+    const RIYADH_MS = RIYADH_OFFSET * 3600 * 1000;
+    return (new Date(a.kickoffIso).getTime() + RIYADH_MS) - (new Date(b.kickoffIso).getTime() + RIYADH_MS);
   });
 
   // Unpredicted-upcoming alert: matches still open (not locked) with no prediction yet
@@ -2543,8 +2552,20 @@ function toggleAdminPenalty(){
   const h=parseInt(document.getElementById('res-h').value);
   const a=parseInt(document.getElementById('res-a').value);
   const row=document.getElementById('admin-pen-row');
-  if(!isNaN(h)&&!isNaN(a)&&h===a) row.style.display='flex';
-  else { row.style.display='none'; selectAdminPenalty(null); }
+  const mid=document.getElementById('result-select').value;
+  const isKo = mid && mid.startsWith('KO_');
+  if(isKo && !isNaN(h) && !isNaN(a) && h===a){
+    row.style.display='flex';
+    // Update button labels with real team names
+    const [home,away] = getKoTeams(mid);
+    const btnH=document.getElementById('admin-pen-H');
+    const btnA=document.getElementById('admin-pen-A');
+    if(btnH) btnH.textContent = home;
+    if(btnA) btnA.textContent = away;
+  } else {
+    row.style.display='none';
+    selectAdminPenalty(null);
+  }
 }
 
 function selectAdminPenalty(team){
