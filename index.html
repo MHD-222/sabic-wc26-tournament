@@ -812,23 +812,23 @@ const KO_ROUNDS = [
 // Third-place slots marked 'TBD-3rd' are filled by admin tomorrow.
 // ============================================================
 const KO_BRACKET = {
-  // ---- R32 (group winner vs runner-up — all confirmed) ----
-  'KO_R32_1':  ['South Africa', 'Canada'],          // M73 Jun 28 — 2A vs 2B
-  'KO_R32_2':  ['Germany', 'Paraguay'],              // M74 Jun 29 — 1E vs TBD-3rd (D/A/B/C/F)
-  'KO_R32_3':  ['Brazil', 'Japan'],                  // M76 Jun 29 — 1C vs 2F
-  'KO_R32_4':  ['Netherlands', 'Morocco'],           // M75 Jun 30 — 1F vs 2C
-  'KO_R32_5':  ['Ivory Coast', 'Norway'],            // M78 Jun 30 — 2E vs 2I
-  'KO_R32_6':  ['France', 'Sweden'],                 // M77 Jun 30 — 1I vs TBD-3rd (F)
-  'KO_R32_7':  ['Mexico', 'TBD-3rd'],               // M79 Jul 1  — 1A vs TBD-3rd (C/E/F/H/I)
-  'KO_R32_8':  ['England', 'TBD-3rd'],              // M80 Jul 1  — 1L vs TBD-3rd (E/H/I/J/K)
-  'KO_R32_9':  ['Belgium', 'TBD-3rd'],              // M82 Jul 1  — 1G vs TBD-3rd (A/E/H/I/J)
-  'KO_R32_10': ['United States', 'Bosnia and Herzegovina'], // M81 Jul 1 — 1D vs TBD-3rd (B confirmed)
-  'KO_R32_11': ['Portugal', 'Ghana'],                // M83 Jul 3  — 2K vs 2L
-  'KO_R32_12': ['Spain', 'Cape Verde'],              // M84 Jul 2  — 1H vs 2J
-  'KO_R32_13': ['Switzerland', 'TBD-3rd'],          // M85 Jul 3  — 1B vs TBD-3rd (E/F/G/I/J)
-  'KO_R32_14': ['Australia', 'Egypt'],               // M88 Jul 3  — 2D vs 2G
-  'KO_R32_15': ['Argentina', 'Algeria'],             // M86 Jul 3  — 1J vs 2H — Cape Verde confirmed 2H
-  'KO_R32_16': ['Colombia', 'TBD-3rd'],             // M87 Jul 4  — 1K vs TBD-3rd (D/E/I/J/L)
+  // ---- R32 — all 16 confirmed (sources: FIFA, CBS, NBC, ESPN, Sky Sports — June 28 2026) ----
+  'KO_R32_1':  ['South Africa', 'Canada'],           // Jun 28 — 2A vs 2B
+  'KO_R32_2':  ['Germany', 'Paraguay'],              // Jun 29 — 1E vs 3D
+  'KO_R32_3':  ['Brazil', 'Japan'],                  // Jun 29 — 1C vs 2F
+  'KO_R32_4':  ['Netherlands', 'Morocco'],           // Jun 29 — 1F vs 2C
+  'KO_R32_5':  ['Ivory Coast', 'Norway'],            // Jun 30 — 2E vs 2I
+  'KO_R32_6':  ['France', 'Sweden'],                 // Jun 30 — 1I vs 3C (Sweden 3rd Group F)
+  'KO_R32_7':  ['Mexico', 'Ecuador'],                // Jun 30 — 1A vs 3E
+  'KO_R32_8':  ['England', 'DR Congo'],              // Jul 1  — 1L vs 3K
+  'KO_R32_9':  ['Belgium', 'Senegal'],               // Jul 1  — 1G vs 3I
+  'KO_R32_10': ['United States', 'Bosnia and Herzegovina'], // Jul 1 — 1D vs 3B
+  'KO_R32_11': ['Portugal', 'Croatia'],              // Jul 2  — 2K vs 2L
+  'KO_R32_12': ['Spain', 'Austria'],                 // Jul 2  — 1H vs 2J
+  'KO_R32_13': ['Switzerland', 'Algeria'],           // Jul 2  — 1B vs 3J
+  'KO_R32_14': ['Australia', 'Egypt'],               // Jul 3  — 2D vs 2G
+  'KO_R32_15': ['Argentina', 'Cape Verde'],          // Jul 3  — 1J vs 2H
+  'KO_R32_16': ['Colombia', 'Ghana'],                // Jul 3  — 1K vs 3L
   // ---- R16 (winners of R32 pairs advance to these pre-set slots) ----
   // R16 bracket tree: W73/W74, W75/W76, W77/W78, W79/W80, W81/W82, W83/W84, W85/W86, W87/W88
   // Mapped as: R16_1=W(R32_1) vs W(R32_2), R16_2=W(R32_3) vs W(R32_4), etc.
@@ -1164,6 +1164,8 @@ function doLogin(){
   renderGroups();
   renderKnockout();
   renderChampion();
+  const seeded = seedGroupResults();
+  if(seeded > 0) saveStateToSheet({mergeScope:'admin'});
   renderLeaderboard();
   renderRules();
   if(currentUser.isAdmin) renderAdmin();
@@ -1292,6 +1294,96 @@ function showTab(tab){
   if(tab==='rules') renderRules();
   if(tab==='myresults') renderMyResults();
   if(tab==='admin') renderAdmin();
+}
+
+
+// ============================================================
+// GROUP STAGE RESULTS — seeded from official sources June 27 2026
+// All 72 matches. Applied automatically; does not overwrite
+// any existing result (admin entries take precedence).
+// ============================================================
+const GROUP_STAGE_RESULTS = {
+    'GA_0_1':{h:2,a:0},
+    'GA_2_3':{h:2,a:1},
+    'GA_1_3':{h:1,a:1},
+    'GA_0_2':{h:1,a:0},
+    'GA_0_3':{h:3,a:0},
+    'GA_1_2':{h:1,a:0},
+    'GB_0_1':{h:1,a:1},
+    'GB_2_3':{h:1,a:1},
+    'GB_1_3':{h:1,a:4},
+    'GB_0_2':{h:6,a:0},
+    'GB_0_3':{h:1,a:2},
+    'GB_1_2':{h:3,a:1},
+    'GC_0_1':{h:1,a:1},
+    'GC_2_3':{h:0,a:1},
+    'GC_1_3':{h:1,a:0},
+    'GC_0_2':{h:3,a:0},
+    'GC_0_3':{h:3,a:0},
+    'GC_1_2':{h:4,a:2},
+    'GD_0_1':{h:4,a:1},
+    'GD_2_3':{h:2,a:0},
+    'GD_0_2':{h:2,a:0},
+    'GD_1_3':{h:1,a:0},
+    'GD_0_3':{h:2,a:3},
+    'GD_1_2':{h:0,a:0},
+    'GE_0_1':{h:7,a:1},
+    'GE_2_3':{h:1,a:0},
+    'GE_0_2':{h:2,a:1},
+    'GE_1_3':{h:0,a:0},
+    'GE_1_2':{h:0,a:2},
+    'GE_0_3':{h:1,a:2},
+    'GF_0_1':{h:2,a:2},
+    'GF_2_3':{h:5,a:1},
+    'GF_0_2':{h:5,a:1},
+    'GF_1_3':{h:4,a:0},
+    'GF_1_2':{h:1,a:1},
+    'GF_0_3':{h:3,a:1},
+    'GG_0_1':{h:1,a:1},
+    'GG_2_3':{h:2,a:2},
+    'GG_0_2':{h:0,a:0},
+    'GG_1_3':{h:3,a:1},
+    'GG_1_2':{h:1,a:1},
+    'GG_0_3':{h:5,a:1},
+    'GH_0_1':{h:0,a:0},
+    'GH_2_3':{h:1,a:1},
+    'GH_0_2':{h:4,a:0},
+    'GH_1_3':{h:2,a:2},
+    'GH_1_2':{h:0,a:0},
+    'GH_0_3':{h:1,a:0},
+    'GI_0_1':{h:3,a:1},
+    'GI_2_3':{h:1,a:4},
+    'GI_0_2':{h:3,a:0},
+    'GI_1_3':{h:2,a:3},
+    'GI_0_3':{h:1,a:4},
+    'GI_1_2':{h:5,a:0},
+    'GJ_0_1':{h:3,a:0},
+    'GJ_2_3':{h:3,a:1},
+    'GJ_0_2':{h:2,a:0},
+    'GJ_1_3':{h:2,a:1},
+    'GJ_0_3':{h:3,a:1},
+    'GJ_1_2':{h:3,a:3},
+    'GK_0_1':{h:1,a:1},
+    'GK_2_3':{h:1,a:3},
+    'GK_0_2':{h:5,a:0},
+    'GK_1_3':{h:0,a:1},
+    'GK_0_3':{h:0,a:0},
+    'GK_1_2':{h:3,a:1},
+    'GL_0_1':{h:4,a:2},
+    'GL_2_3':{h:1,a:0},
+    'GL_0_2':{h:0,a:0},
+    'GL_1_3':{h:1,a:0},
+    'GL_0_3':{h:2,a:0},
+    'GL_1_2':{h:2,a:1},
+  };
+
+function seedGroupResults(){
+  if(!state.results) state.results = {};
+  let added = 0;
+  Object.entries(GROUP_STAGE_RESULTS).forEach(([mid, res]) => {
+    if(!state.results[mid]){ state.results[mid] = res; added++; }
+  });
+  return added;
 }
 
 function renderGroups(){
