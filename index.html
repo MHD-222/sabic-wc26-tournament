@@ -308,6 +308,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         </div>
       </div>
 
+      <div class="admin-block" id="restore-block">
+        <h3>🔧 Restore missing predictions</h3>
+        <p style="font-size:12px;color:#939598;margin-bottom:10px">One-time restore of KO R32 predictions lost from the JSON blob (Mohammed S, Khaled, Moe). Only adds missing entries — never overwrites existing ones.</p>
+        <button class="btn btn-sm btn-primary" onclick="restoreMissingKoPredictions()" style="width:auto">Restore missing predictions</button>
+      </div>
+
       <div class="admin-block">
         <h3>⚡ Matches awaiting a result</h3>
         <p style="font-size:12px;color:#939598;margin-bottom:10px">Matches that have already kicked off but have no result yet. Type the full-time score and save — fastest way to keep the leaderboard current.</p>
@@ -1717,6 +1723,51 @@ function peUpdatePenRow(){
 }
 
 function pePen(team){ pePenPick = team; peUpdatePenRow(); }
+
+async function restoreMissingKoPredictions(){
+  // One-time restore of KO R32 predictions lost from JSON blob.
+  // Source: screenshots provided by admin on Jun 29 2026.
+  // SAFE: only adds entries that are currently missing — never overwrites existing ones.
+  const toRestore = {
+    'Mohammed S': {
+      'KO_R32_1':{h:1,a:2},'KO_R32_2':{h:2,a:0},'KO_R32_3':{h:1,a:1},
+      'KO_R32_4':{h:2,a:1},'KO_R32_5':{h:0,a:2},'KO_R32_6':{h:2,a:0},
+      'KO_R32_7':{h:2,a:0},'KO_R32_8':{h:3,a:1},'KO_R32_9':{h:1,a:1},
+      'KO_R32_10':{h:3,a:0},'KO_R32_11':{h:1,a:2},'KO_R32_12':{h:2,a:0},
+      'KO_R32_13':{h:1,a:1},'KO_R32_14':{h:2,a:0},'KO_R32_15':{h:3,a:0},'KO_R32_16':{h:2,a:0}
+    },
+    'Khaled': {
+      'KO_R32_1':{h:1,a:2},'KO_R32_2':{h:3,a:1},'KO_R32_3':{h:2,a:0},
+      'KO_R32_4':{h:2,a:2},'KO_R32_5':{h:0,a:4},'KO_R32_6':{h:3,a:0}
+      // R32_7 through R32_16 not visible in screenshot — player must re-enter
+    },
+    'Moe': {
+      'KO_R32_1':{h:1,a:2},'KO_R32_2':{h:2,a:0},'KO_R32_3':{h:1,a:0},
+      'KO_R32_4':{h:1,a:2},'KO_R32_5':{h:0,a:2},'KO_R32_6':{h:3,a:0},
+      'KO_R32_7':{h:2,a:2},'KO_R32_8':{h:2,a:0},'KO_R32_9':{h:3,a:2},
+      'KO_R32_10':{h:2,a:1},'KO_R32_11':{h:1,a:1}
+      // R32_12 through R32_16 not visible in screenshot — player must re-enter
+    }
+  };
+  let added = 0;
+  Object.entries(toRestore).forEach(([pname, preds])=>{
+    if(!state.predictions[pname]) state.predictions[pname] = {};
+    Object.entries(preds).forEach(([mid, score])=>{
+      if(!state.predictions[pname][mid]){
+        state.predictions[pname][mid] = score;
+        added++;
+      }
+    });
+  });
+  if(added === 0){
+    alert('Nothing to restore — all entries already present.');
+    return;
+  }
+  await saveStateToSheet({mergeScope:'admin'});
+  renderLeaderboard();
+  renderKnockout();
+  alert(`✓ Restored ${added} missing predictions. Khaled (R32_7–16) and Moe (R32_12–16) still need to re-enter their remaining matches.`);
+}
 
 async function peSave(){
   const pname = document.getElementById('pe-player').value;
