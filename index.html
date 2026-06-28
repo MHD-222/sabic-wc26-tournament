@@ -2340,7 +2340,9 @@ function renderAwaitingResults(){
       const iso = MATCH_SCHEDULE[mid];
       if(!iso) continue;
       if(new Date(iso) <= now){
-        items.push({mid, home:'Team A', away:'Team B', iso, label:`${r.label} · Match ${i+1}`, ko:true});
+        {const [koH,koA]=getKoTeams(mid);
+        const tbd=(lang==='ar'?'لم يُحدد':'TBD');
+        items.push({mid, home:koH!==tbd?koH:'Team A', away:koA!==tbd?koA:'Team B', iso, label:`${r.label} · Match ${i+1}`, ko:true});}
       }
     }
   });
