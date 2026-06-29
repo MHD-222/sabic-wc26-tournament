@@ -220,8 +220,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <!-- MAIN -->
   <div id="screen-main" style="display:none">
     <div class="nav" id="main-nav">
-      <button class="nav-btn active" onclick="showTab('groups')" id="tab-btn-groups" data-en="Groups" data-ar="المجموعات">Groups</button>
-      <button class="nav-btn" onclick="showTab('knockout')" id="tab-btn-knockout" data-en="Knockout" data-ar="إقصائي">Knockout</button>
+      <button class="nav-btn" onclick="showTab('groups')" id="tab-btn-groups" data-en="Groups" data-ar="المجموعات">Groups</button>
+      <button class="nav-btn active" onclick="showTab('knockout')" id="tab-btn-knockout" data-en="Knockout" data-ar="إقصائي">Knockout</button>
       <button class="nav-btn" onclick="showTab('champion')" id="tab-btn-champion" data-en="Champion" data-ar="البطل">Champion</button>
       <button class="nav-btn" onclick="showTab('leaderboard')" id="tab-btn-leaderboard" data-en="Leaderboard" data-ar="الترتيب">Leaderboard</button>
       <button class="nav-btn" onclick="showTab('myresults')" id="tab-btn-myresults" data-en="My Results" data-ar="نتائجي">My Results</button>
@@ -1084,6 +1084,10 @@ async function saveStateToSheet(opts) {
           // API-sourced data is admin-owned too
           merged.teamLogos = state.teamLogos || merged.teamLogos || {};
           merged.koOverrides = Object.assign({}, merged.koOverrides||{}, state.koOverrides||{});
+          // Preserve all players' advance picks — admin saves must never wipe these
+          const mergedAdvance = Object.assign({}, merged.advance_picks||{}, state.advance_picks||{});
+          Object.keys(mergedAdvance).forEach(n => { if (!liveNames.has(n)) delete mergedAdvance[n]; });
+          merged.advance_picks = mergedAdvance;
           merged.standings = state.standings || merged.standings || {};
           merged.fixtures = state.fixtures || merged.fixtures || {};
           merged.apiMeta = state.apiMeta || merged.apiMeta || {};
@@ -1176,6 +1180,7 @@ function doLogin(){
   applyLangToMain();
   renderGroups();
   renderKnockout();
+  showTab('knockout'); // Default to knockout tab on login
   renderChampion();
   const seeded = seedGroupResults();
   // Only admin triggers a save when seeding results — regular players seed locally
@@ -2088,6 +2093,8 @@ function matchDetailHTML(mid, homeTeam, awayTeam, locked, result){
   }
 
   const penName = (pen) => pen==='H'?homeTeam : pen==='A'?awayTeam : '';
+  // Did this match go to penalties?
+  const wentToPens = result && result.h===result.a && result.pen;
   const rowsHtml = entries.map(e=>{
     const isMe = currentUser && e.name===currentUser.name;
     let chip = '';
@@ -2096,11 +2103,33 @@ function matchDetailHTML(mid, homeTeam, awayTeam, locked, result){
       else if(e.cls==='result') chip = `<span class="res-chip result">✓ +${e.pts}</span>`;
       else chip = `<span class="res-chip miss">+0</span>`;
     }
-    const penStr = e.pen ? ` <span style="color:#FFA300;font-size:11px">(${ar?'ترجيح':'pen'}: ${penName(e.pen)})</span>` : '';
+    // Advance pick — only show if match actually went to penalties
+    let advStr = '';
+    if(wentToPens){
+      const advPick = (state.advance_picks&&state.advance_picks[e.name])
+        ? state.advance_picks[e.name][mid] : null;
+      if(advPick){
+        const advTeam = advPick==='H' ? homeTeam : awayTeam;
+        const advCorrect = advPick===result.pen;
+        const advChip = advCorrect
+          ? `<span class="res-chip exact" style="font-size:10px">🏆 +1</span>`
+          : `<span class="res-chip miss" style="font-size:10px">🏆 +0</span>`;
+        advStr = `<div style="font-size:11px;color:#939598;margin-top:2px;padding-left:4px">
+          ${ar?'يتأهل:':'advances:'} <span style="font-weight:600;color:${advCorrect?'#1D9E75':'#C53A00'}">${advTeam}</span> ${advChip}
+        </div>`;
+      } else {
+        advStr = `<div style="font-size:11px;color:#C6C8CA;margin-top:2px;padding-left:4px">${ar?'لم يختر التأهل':'no advance pick'}</div>`;
+      }
+    }
     return `<div class="pred-row${isMe?' pred-me':''}">
-      <span class="pred-name">${e.name}${isMe?(ar?' (أنت)':' (you)'):''}</span>
-      <span class="pred-score">${e.h}–${e.a}${penStr}</span>
-      ${chip}
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="pred-name">${e.name}${isMe?(ar?' (أنت)':' (you)'):''}</span>
+          <span class="pred-score">${e.h}–${e.a}</span>
+          ${chip}
+        </div>
+        ${advStr}
+      </div>
     </div>`;
   }).join('');
 
