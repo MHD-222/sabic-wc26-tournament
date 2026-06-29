@@ -1773,6 +1773,24 @@ async function restoreMissingKoPredictions(){
   alert(`✓ Restored ${added} missing predictions. Khaled (R32_7–16) and Moe (R32_12–16) still need to re-enter their remaining matches.`);
 }
 
+function selectAdvance(mid, team){
+  // Store advance pick in state immediately so it survives re-renders
+  if(!state.advance_picks) state.advance_picks = {};
+  if(!state.advance_picks[currentUser.name]) state.advance_picks[currentUser.name] = {};
+  // Toggle: clicking the same button again deselects
+  if(state.advance_picks[currentUser.name][mid] === team){
+    delete state.advance_picks[currentUser.name][mid];
+  } else {
+    state.advance_picks[currentUser.name][mid] = team;
+  }
+  // Update button visual states for THIS match only — no re-render of other cards
+  const btnH = document.getElementById(mid+'_adv_H');
+  const btnA = document.getElementById(mid+'_adv_A');
+  const pick = state.advance_picks[currentUser.name][mid];
+  if(btnH) btnH.className = btnH.className.replace(/\bselected\b/g,'').trim() + (pick==='H'?' selected':'');
+  if(btnA) btnA.className = btnA.className.replace(/\bselected\b/g,'').trim() + (pick==='A'?' selected':'');
+}
+
 async function peSave(){
   const pname = document.getElementById('pe-player').value;
   const mid = document.getElementById('pe-match').value;
@@ -2623,11 +2641,13 @@ async function saveCurrentTab(){
         const h=document.getElementById(mid+'_h');
         const a=document.getElementById(mid+'_a');
         if(h&&h.value!==''&&a&&a.value!==''){
-          const pred={h:parseInt(h.value),a:parseInt(a.value)};
-          preds[mid]=pred;
+          preds[mid]={h:parseInt(h.value),a:parseInt(a.value)};
         }
       }
     });
+    // Advance picks are already live in state.advance_picks — no DOM reading needed
+    // because selectAdvance() writes to state immediately on click.
+    // Nothing extra to capture here.
   } else if(tabId==='champion'){
     const sel=document.querySelector('.champ-btn.selected');
     if(sel) state.champion_picks[currentUser.name]=sel.textContent;
