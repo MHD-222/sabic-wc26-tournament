@@ -575,7 +575,7 @@ const MATCH_SCHEDULE = {
   'KO_R32_1':  '2026-06-28T19:00:00Z',
   'KO_R32_2':  '2026-06-29T20:30:00Z',
   'KO_R32_3':  '2026-06-29T17:00:00Z',
-  'KO_R32_4':  '2026-06-30T13:00:00Z',
+  'KO_R32_4':  '2026-06-30T01:00:00Z',
   'KO_R32_5':  '2026-06-30T17:00:00Z',
   'KO_R32_6':  '2026-06-30T21:00:00Z',
   'KO_R32_7':  '2026-07-01T01:00:00Z',
@@ -1182,7 +1182,7 @@ function doLogin(){
   renderKnockout();
   showTab('knockout'); // Default to knockout tab on login
   renderChampion();
-  const seeded = seedGroupResults();
+  const seeded = seedGroupResults() + seedKoResults();
   // Only admin triggers a save when seeding results — regular players seed locally
   // but must NOT do an admin-scope save as it risks overwriting other players' data.
   if(seeded > 0 && currentUser && currentUser.isAdmin){
@@ -1398,6 +1398,26 @@ const GROUP_STAGE_RESULTS = {
     'GL_0_3':{h:2,a:0},
     'GL_1_2':{h:2,a:1},
   };
+
+// ============================================================
+// KNOCKOUT RESULTS — seeded as matches complete (verified FIFA official)
+// Safe: only adds results that are missing, never overwrites admin entries.
+// ============================================================
+const KO_COMPLETED_RESULTS = {
+  'KO_R32_1':  {h:0, a:1},              // South Africa 0-1 Canada
+  'KO_R32_3':  {h:2, a:1},              // Brazil 2-1 Japan
+  'KO_R32_2':  {h:1, a:1, pen:'A'},     // Germany 1-1 Paraguay (Paraguay win pens)
+  'KO_R32_4':  {h:1, a:1, pen:'A'},     // Netherlands 1-1 Morocco (Morocco win pens)
+};
+
+function seedKoResults(){
+  if(!state.results) state.results = {};
+  let added = 0;
+  Object.entries(KO_COMPLETED_RESULTS).forEach(([mid, res]) => {
+    if(!state.results[mid]){ state.results[mid] = res; added++; }
+  });
+  return added;
+}
 
 function seedGroupResults(){
   if(!state.results) state.results = {};
