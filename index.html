@@ -2260,7 +2260,21 @@ function playerBreakdownHTML(pname){
     <span class="mr-stat" style="margin:0 4px 4px 0;padding:5px 10px"><span class="num" style="font-size:16px">${correct}</span><span class="lbl">${ar?'صحيحة':'correct'}</span></span>
     <span class="mr-stat" style="margin:0 4px 4px 0;padding:5px 10px"><span class="num" style="font-size:16px">${missed}</span><span class="lbl">${ar?'خطأ':'missed'}</span></span>
   </div>`;
-  const rowsHtml = rows.map(r=>{
+
+  // Group rows by stage (Groups / R32 / R16 / QF / SF / Final) for easier scanning.
+  // Groups stage starts collapsed (it's the longest); knockout stages start open.
+  const byStage = {};
+  rows.forEach(r=>{
+    const stage = myResultsStageFor(r.mid);
+    if(!byStage[stage.key]) byStage[stage.key] = {stage, items:[], pts:0, exact:0};
+    byStage[stage.key].items.push(r);
+    byStage[stage.key].pts += r.pts + (r.advBonus?r.advBonus.points:0);
+    if(r.cls==='exact') byStage[stage.key].exact++;
+  });
+  // Unique id scope so multiple players' panels can each toggle independently
+  const scopeId = 'pb-' + pname.replace(/[^a-zA-Z0-9]/g,'');
+
+  const renderRow = (r) => {
     let chip = r.cls==='exact'?`<span class="res-chip exact">🎯 +${r.pts}</span>`
              : r.cls==='result'?`<span class="res-chip result">✓ +${r.pts}</span>`
              : `<span class="res-chip miss">+0</span>`;
@@ -2282,8 +2296,36 @@ function playerBreakdownHTML(pname){
       </div>
       ${advLine}
     </div>`;
+  };
+
+  const stagesHtml = Object.values(byStage).sort((a,b)=>a.stage.order-b.stage.order).map(group=>{
+    const isGroups = group.stage.key==='groups';
+    const sectionId = `${scopeId}-${group.stage.key}`;
+    const startOpen = !isGroups; // Groups collapsed by default, knockout stages open
+    return `<div style="margin-top:10px">
+      <button onclick="togglePbStage('${sectionId}')" style="width:100%;display:flex;align-items:center;justify-content:space-between;background:#F4F5F6;border:1px solid #E6E7E8;border-radius:8px;padding:7px 10px;cursor:pointer;font-family:inherit">
+        <span style="font-size:12px;font-weight:700;color:#0047BB">${ar?group.stage.labelAr:group.stage.label}</span>
+        <span style="font-size:11px;color:#404D4D;display:flex;align-items:center;gap:6px">
+          <span>${group.pts} ${ar?'نقاط':'pts'} · 🎯 ${group.exact}</span>
+          <span id="${sectionId}-chevron">${startOpen?'▴':'▾'}</span>
+        </span>
+      </button>
+      <div id="${sectionId}" style="display:${startOpen?'block':'none'};padding-top:4px">
+        ${group.items.map(renderRow).join('')}
+      </div>
+    </div>`;
   }).join('');
-  return summary + `<div class="pred-list">${champLine}${rowsHtml}</div>`;
+
+  return summary + `<div class="pred-list">${champLine}</div>${stagesHtml}`;
+}
+
+function togglePbStage(sectionId){
+  const panel = document.getElementById(sectionId);
+  const chevron = document.getElementById(sectionId+'-chevron');
+  if(!panel) return;
+  const open = panel.style.display !== 'none';
+  panel.style.display = open ? 'none' : 'block';
+  if(chevron) chevron.textContent = open ? '▾' : '▴';
 }
 
 function toggleLbDetail(prefix, i){
