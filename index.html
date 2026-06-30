@@ -1193,6 +1193,36 @@ function doLogin(){
 }
 
 
+function toggleKoPenRow(mid){
+  const h = document.getElementById(mid+'_h');
+  const a = document.getElementById(mid+'_a');
+  const row = document.getElementById(mid+'_pen_row');
+  if(!h || !a || !row) return;
+  const hv = parseInt(h.value), av = parseInt(a.value);
+  const isDraw = !isNaN(hv) && !isNaN(av) && hv===av;
+  row.style.display = isDraw ? 'flex' : 'none';
+  if(!isDraw){
+    // Clear any stored pen pick if the prediction is no longer a draw
+    if(!state.predictions[currentUser.name]) state.predictions[currentUser.name]={};
+    const pred = state.predictions[currentUser.name][mid];
+    if(pred && pred.pen) delete pred.pen;
+  }
+}
+
+function selectKoPenalty(mid, team){
+  if(!state.predictions[currentUser.name]) state.predictions[currentUser.name]={};
+  const preds = state.predictions[currentUser.name];
+  if(!preds[mid]) preds[mid]={};
+  // Toggle: clicking the same team again deselects
+  preds[mid].pen = (preds[mid].pen===team) ? undefined : team;
+  // Update button visuals for this match only
+  const btnH = document.getElementById(mid+'_pen_H');
+  const btnA = document.getElementById(mid+'_pen_A');
+  const pick = preds[mid].pen;
+  if(btnH) btnH.classList.toggle('selected', pick==='H');
+  if(btnA) btnA.classList.toggle('selected', pick==='A');
+}
+
 function updateWinIndicator(matchId) {
   const hInput = document.getElementById(matchId + '_h');
   const aInput = document.getElementById(matchId + '_a');
@@ -1582,40 +1612,46 @@ function renderKnockout(){
       const tbdHome = (koHome === (lang==='ar'?'لم يُحدد':'TBD'));
       const tbdAway = (koAway === (lang==='ar'?'لم يُحدد':'TBD'));
       const ar = (lang==='ar');
-      // Advance pick — independent of score prediction
-      const myAdvance = (state.advance_picks&&state.advance_picks[currentUser.name])
-        ? state.advance_picks[currentUser.name][mid] : null;
-      // Score the advance pick if there's a result
-      const asc = result ? scoreAdvancePick(mid, myAdvance, result) : null;
-      // Visual state for advance row
-      const rIsDraw = result && result.h===result.a;
-      const advanceLabel = ar ? '🏆 من يتأهل؟ (تفعّل فقط إذا صار تعادل وركلات ترجيح)' : '🏆 Who advances? (only counts if it goes to penalties)';
-      let advanceRowClass = 'advance-row';
-      let advanceNote = '';
-      if(result && !rIsDraw){
-        // clear winner — pick is irrelevant
-        advanceRowClass += ' irrelevant';
-        advanceNote = `<span style="font-size:11px;color:#939598;margin-left:auto">${ar?'لا ركلات — هذا التوقع لا يُحتسب':'No penalties — this pick didn\'t count'}</span>`;
-      } else if(result && rIsDraw && asc){
-        // went to penalties — pick is active
-        advanceRowClass += ' active';
-        advanceNote = asc.correct
-          ? `<span style="font-size:11px;color:#1D9E75;margin-left:auto;font-weight:700">✓ +1 ${ar?'نقطة':'pt'}</span>`
-          : `<span style="font-size:11px;color:#C53A00;margin-left:auto;font-weight:700">${ar?'اختيار خاطئ':'Wrong pick'} +0</span>`;
+      // Penalty pick is now folded into the draw prediction itself — only relevant
+      // when the player's own predicted score is a draw.
+      let penRowHtml = '';
+      if(result){
+        // Match finished: show how the saved draw+pen pick scored, if applicable
+        if(saved && parseInt(saved.h)===parseInt(saved.a)){
+          const wentToPens = result.h===result.a && result.pen;
+          if(wentToPens){
+            const myPenPick = saved.pen;
+            const correct = myPenPick && myPenPick===result.pen;
+            const note = myPenPick
+              ? (correct
+                  ? `<span style="font-size:11px;color:#1D9E75;margin-left:auto;font-weight:700">✓ +1 ${ar?'نقطة':'pt'}</span>`
+                  : `<span style="font-size:11px;color:#C53A00;margin-left:auto;font-weight:700">${ar?'اختيار خاطئ':'Wrong pick'} +0</span>`)
+              : `<span style="font-size:11px;color:#939598;margin-left:auto">${ar?'لم تختر فائز الترجيح':'No penalty pick made'}</span>`;
+            penRowHtml = `<div class="advance-row active">
+              <span class="advance-label">🏆 ${ar?'توقّعك لفائز الترجيح:':'Your penalty pick:'} <strong>${myPenPick?(myPenPick==='H'?koHome:koAway):'—'}</strong></span>
+              ${note}
+            </div>`;
+          }
+        }
+      } else if(!koLocked){
+        // Still open: show the inline pen picker only if the CURRENT typed score is a draw
+        const penH = saved && saved.pen==='H';
+        const penA = saved && saved.pen==='A';
+        penRowHtml = `<div class="advance-row" id="${mid}_pen_row" style="display:${isDraw?'flex':'none'}">
+          <span class="advance-label">🏆 ${ar?'فائز الترجيح؟':'Penalty winner?'}</span>
+          <button class="advance-btn${penH?' selected':''}" id="${mid}_pen_H" onclick="selectKoPenalty('${mid}','H')">${tbdHome?(ar?'الفريق الأول':'Team A'):koHome}</button>
+          <button class="advance-btn${penA?' selected':''}" id="${mid}_pen_A" onclick="selectKoPenalty('${mid}','A')">${tbdAway?(ar?'الفريق الثاني':'Team B'):koAway}</button>
+        </div>`;
+      } else if(saved && parseInt(saved.h)===parseInt(saved.a)){
+        // Locked, no result yet, but player predicted a draw — show their saved pick (read-only)
+        const penH = saved.pen==='H';
+        const penA = saved.pen==='A';
+        penRowHtml = `<div class="advance-row">
+          <span class="advance-label">🏆 ${ar?'فائز الترجيح؟':'Penalty winner?'}</span>
+          <button class="advance-btn${penH?' selected':''}" disabled>${tbdHome?(ar?'الفريق الأول':'Team A'):koHome}</button>
+          <button class="advance-btn${penA?' selected':''}" disabled>${tbdAway?(ar?'الفريق الثاني':'Team B'):koAway}</button>
+        </div>`;
       }
-      // Build advance button classes
-      const homeCls = () => {
-        if(!myAdvance) return 'advance-btn';
-        if(myAdvance!=='H') return 'advance-btn';
-        if(asc&&asc.active) return asc.correct?'advance-btn selected correct':'advance-btn selected wrong';
-        return 'advance-btn selected';
-      };
-      const awayCls = () => {
-        if(!myAdvance) return 'advance-btn';
-        if(myAdvance!=='A') return 'advance-btn';
-        if(asc&&asc.active) return asc.correct?'advance-btn selected correct':'advance-btn selected wrong';
-        return 'advance-btn selected';
-      };
       card.innerHTML=`
         <div class="match-meta">
           ${ar?round.labelAr:round.label} · ${ar?'مباراة':'Match'} ${i+1}
@@ -1626,21 +1662,12 @@ function renderKnockout(){
         </div>
         <div class="match-row">
           <span class="team-name" style="${tbdHome?'color:#939598':'color:#041E42'};display:flex;align-items:center;gap:5px">${logoImg(koHome,18)} ${koHome}</span>
-          <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="–" inputmode="numeric" ${koLocked?'disabled':''} oninput="updateWinIndicator('${mid}')"/>
+          <input class="score-input" type="number" min="0" max="20" id="${mid}_h" value="${saved?saved.h:''}" placeholder="–" inputmode="numeric" ${koLocked?'disabled':''} oninput="updateWinIndicator('${mid}');toggleKoPenRow('${mid}')"/>
           <span class="vs">${ar?'ضد':'vs'}</span>
-          <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="–" inputmode="numeric" ${koLocked?'disabled':''} oninput="updateWinIndicator('${mid}')"/>
+          <input class="score-input" type="number" min="0" max="20" id="${mid}_a" value="${saved?saved.a:''}" placeholder="–" inputmode="numeric" ${koLocked?'disabled':''} oninput="updateWinIndicator('${mid}');toggleKoPenRow('${mid}')"/>
           <span class="team-name right" style="${tbdAway?'color:#939598':'color:#041E42'};display:flex;align-items:center;gap:5px;justify-content:flex-end">${koAway} ${logoImg(koAway,18)}</span>
         </div>
-        <div class="${advanceRowClass}">
-          <span class="advance-label">${advanceLabel}</span>
-          <button class="${homeCls()}" id="${mid}_adv_H" onclick="selectAdvance('${mid}','H')" ${koLocked?'disabled':''}>
-            ${tbdHome?(ar?'الفريق الأول':'Team A'):koHome}
-          </button>
-          <button class="${awayCls()}" id="${mid}_adv_A" onclick="selectAdvance('${mid}','A')" ${koLocked?'disabled':''}>
-            ${tbdAway?(ar?'الفريق الثاني':'Team B'):koAway}
-          </button>
-          ${advanceNote}
-        </div>
+        ${penRowHtml}
         ${matchDetailHTML(mid, koHome, koAway, koLocked, result)}`;
       container.appendChild(card);
   });
@@ -1785,6 +1812,14 @@ async function peClear(){
   pePenPick=null; peUpdatePenRow();
 }
 
+function myResultsStageFor(mid){
+  // Returns {key, label, labelAr, order} for grouping matches into clear sections
+  if(mid.startsWith('G')) return {key:'groups', label:'Groups', labelAr:'دور المجموعات', order:0};
+  const r = KO_ROUNDS.find(rr => mid.startsWith('KO_'+rr.id+'_'));
+  if(r) return {key:r.id, label:r.label, labelAr:r.labelAr, order: 1 + KO_ROUNDS.indexOf(r)};
+  return {key:'other', label:'Other', labelAr:'أخرى', order:99};
+}
+
 function renderMyResults(){
   const sumEl = document.getElementById('myresults-summary');
   const c = document.getElementById('myresults-container');
@@ -1792,41 +1827,29 @@ function renderMyResults(){
   const preds = state.predictions[currentUser.name] || {};
   const ar = (lang==='ar');
 
-  // Build team lookups for group matches
-  function teamsFor(mid){
-    if(mid.startsWith('G')){
-      const m = mid.match(/^G([A-L])_(\d+)_(\d+)$/);
-      if(m){ const g=GROUPS[m[1]]; return [g[+m[2]], g[+m[3]]]; }
-    }
-    return null;
-  }
-  function koLabel(mid){
-    const r = KO_ROUNDS.find(rr => mid.startsWith('KO_'+rr.id+'_'));
-    const idx = mid.split('_').pop();
-    if(!r) return mid;
-    return (ar?r.labelAr:r.label) + ' · ' + (ar?'مباراة':'Match') + ' ' + idx;
-  }
-
   let total=0, exact=0, correct=0, missed=0, scored=0, predictedCount=0;
   const rows=[];
-  // Sort: scored matches first (by kickoff via schedule), then pending
   const allMids = Object.keys(preds);
   predictedCount = allMids.length;
   allMids.forEach(mid=>{
     const pred = preds[mid];
     const result = state.results[mid];
-    const tm = teamsFor(mid);
-    const title = tm ? `${tm[0]} ${ar?'ضد':'vs'} ${tm[1]}` : koLabel(mid);
-    const predStr = `${pred.h}–${pred.a}` + (pred.pen?` (${ar?'ترجيح':'pen'}: ${pred.pen==='H'?(tm?tm[0]:'H'):(tm?tm[1]:'A')})`:'');
+    const tm = matchTeamsFor(mid); // real team names for both groups AND knockout matches
+    const title = tm ? `${tm[0]} ${ar?'ضد':'vs'} ${tm[1]}` : matchLabelFor(mid);
+    const stage = myResultsStageFor(mid);
     if(result){
       scored++;
       const sc = scoreOneMatch(mid, pred, result);
       total += sc.points;
       if(sc.cls==='exact') exact++; else if(sc.cls==='result') correct++; else missed++;
-      const resStr = `${result.h}–${result.a}` + (result.pen?` (${ar?'الفائز بالترجيح: ':'Penalties Winner: '}${result.pen==='H'?homeTeam:awayTeam})`:'');
-      rows.push({done:true, title, predStr, resStr, sc});
+      const predPenStr = pred.pen?` <span style="color:#FFA300">(${ar?'فائز الترجيح: ':'pen: '}${pred.pen==='H'?(tm?tm[0]:'H'):(tm?tm[1]:'A')})</span>`:'';
+      const predStr = `${pred.h}–${pred.a}${predPenStr}`;
+      const resStr = `${result.h}–${result.a}` + (result.pen?` (${ar?'الفائز بالترجيح: ':'Penalties Winner: '}${result.pen==='H'?(tm?tm[0]:'H'):(tm?tm[1]:'A')})`:'');
+      rows.push({done:true, title, predStr, resStr, sc, stage});
     } else {
-      rows.push({done:false, title, predStr});
+      const predPenStr = pred.pen?` <span style="color:#FFA300">(${ar?'فائز الترجيح: ':'pen: '}${pred.pen==='H'?(tm?tm[0]:'H'):(tm?tm[1]:'A')})</span>`:'';
+      const predStr = `${pred.h}–${pred.a}${predPenStr}`;
+      rows.push({done:false, title, predStr, stage});
     }
   });
 
@@ -1844,27 +1867,38 @@ function renderMyResults(){
     c.innerHTML = `<div class="alert alert-info">${ar?'لم تُدخل أي توقعات بعد.':'You haven\'t entered any predictions yet.'}</div>`;
     return;
   }
-  // Show scored first
-  rows.sort((a,b)=> (a.done===b.done)?0:(a.done?-1:1));
-  c.innerHTML = rows.map(r=>{
-    if(r.done){
-      return `<div class="match-card">
-        <div class="match-meta">${r.title}
-          <span class="res-chip ${r.sc.cls}" style="margin-left:auto">${(ar?r.sc.labelAr:r.sc.label)} · +${r.sc.points}</span>
-        </div>
-        <div style="display:flex;gap:16px;font-size:13px;color:#404D4D">
-          <span>${ar?'توقعك':'Your pick'}: <strong>${r.predStr}</strong></span>
-          <span>${ar?'النتيجة':'Actual'}: <strong style="color:#041E42">${r.resStr}</strong></span>
-        </div>
-      </div>`;
-    } else {
-      return `<div class="match-card" style="opacity:0.75">
-        <div class="match-meta">${r.title}
-          <span class="res-chip pending" style="margin-left:auto">${ar?'لم تُلعب بعد':'Not played yet'}</span>
-        </div>
-        <div style="font-size:13px;color:#404D4D">${ar?'توقعك':'Your pick'}: <strong>${r.predStr}</strong></div>
-      </div>`;
-    }
+
+  // Group by stage, scored-first within each stage
+  rows.sort((a,b)=> (a.stage.order-b.stage.order) || ((a.done===b.done)?0:(a.done?-1:1)));
+  const byStage = {};
+  rows.forEach(r=>{
+    if(!byStage[r.stage.key]) byStage[r.stage.key] = {stage:r.stage, items:[]};
+    byStage[r.stage.key].items.push(r);
+  });
+
+  c.innerHTML = Object.values(byStage).sort((a,b)=>a.stage.order-b.stage.order).map(group=>{
+    const header = `<div class="group-label" style="margin-top:1.25rem">${ar?group.stage.labelAr:group.stage.label}</div>`;
+    const cardsHtml = group.items.map(r=>{
+      if(r.done){
+        return `<div class="match-card">
+          <div class="match-meta">${r.title}
+            <span class="res-chip ${r.sc.cls}" style="margin-left:auto">${(ar?r.sc.labelAr:r.sc.label)} · +${r.sc.points}</span>
+          </div>
+          <div style="display:flex;gap:16px;font-size:13px;color:#404D4D;flex-wrap:wrap">
+            <span>${ar?'توقعك':'Your pick'}: <strong>${r.predStr}</strong></span>
+            <span>${ar?'النتيجة':'Actual'}: <strong style="color:#041E42">${r.resStr}</strong></span>
+          </div>
+        </div>`;
+      } else {
+        return `<div class="match-card" style="opacity:0.75">
+          <div class="match-meta">${r.title}
+            <span class="res-chip pending" style="margin-left:auto">${ar?'لم تُلعب بعد':'Not played yet'}</span>
+          </div>
+          <div style="font-size:13px;color:#404D4D">${ar?'توقعك':'Your pick'}: <strong>${r.predStr}</strong></div>
+        </div>`;
+      }
+    }).join('');
+    return header + cardsHtml;
   }).join('');
 }
 
@@ -2035,7 +2069,10 @@ function matchDetailHTML(mid, homeTeam, awayTeam, locked, result){
     entries.forEach(e=>{
       const sc = scoreOneMatch(mid, {h:e.h,a:e.a,pen:e.pen}, result);
       e.cls = sc ? sc.cls : 'miss';
-      e.pts = sc ? sc.points : 0;
+      e.pts = sc ? sc.basePoints : 0; // base score only, bonus shown separately
+      e.penActive = sc ? sc.penActive : false;
+      e.penCorrect = sc ? sc.penCorrect : false;
+      e.penBonus = sc ? sc.penBonus : 0;
     });
     const rank = {exact:0, result:1, miss:2};
     entries.sort((x,y)=> (rank[x.cls]-rank[y.cls]) || (y.pts-x.pts) || x.name.localeCompare(y.name));
@@ -2044,8 +2081,6 @@ function matchDetailHTML(mid, homeTeam, awayTeam, locked, result){
   }
 
   const penName = (pen) => pen==='H'?homeTeam : pen==='A'?awayTeam : '';
-  // Did this match go to penalties?
-  const wentToPens = result && result.h===result.a && result.pen;
   const rowsHtml = entries.map(e=>{
     const isMe = currentUser && e.name===currentUser.name;
     let chip = '';
@@ -2054,22 +2089,19 @@ function matchDetailHTML(mid, homeTeam, awayTeam, locked, result){
       else if(e.cls==='result') chip = `<span class="res-chip result">✓ +${e.pts}</span>`;
       else chip = `<span class="res-chip miss">+0</span>`;
     }
-    // Advance pick — only show if match actually went to penalties
+    // Penalty pick bonus — only shown when this player's draw prediction made it eligible
     let advStr = '';
-    if(wentToPens){
-      const advPick = (state.advance_picks&&state.advance_picks[e.name])
-        ? state.advance_picks[e.name][mid] : null;
-      if(advPick){
-        const advTeam = advPick==='H' ? homeTeam : awayTeam;
-        const advCorrect = advPick===result.pen;
-        const advChip = advCorrect
+    if(result && e.penActive){
+      if(e.pen){
+        const advTeam = penName(e.pen);
+        const advChip = e.penCorrect
           ? `<span class="res-chip exact" style="font-size:10px">🏆 +1</span>`
           : `<span class="res-chip miss" style="font-size:10px">🏆 +0</span>`;
         advStr = `<div style="font-size:11px;color:#939598;margin-top:2px;padding-left:4px">
-          ${ar?'يتأهل:':'advances:'} <span style="font-weight:600;color:${advCorrect?'#1D9E75':'#C53A00'}">${advTeam}</span> ${advChip}
+          ${ar?'فائز الترجيح المتوقع:':'penalty pick:'} <span style="font-weight:600;color:${e.penCorrect?'#1D9E75':'#C53A00'}">${advTeam}</span> ${advChip}
         </div>`;
       } else {
-        advStr = `<div style="font-size:11px;color:#C6C8CA;margin-top:2px;padding-left:4px">${ar?'لم يختر التأهل':'no advance pick'}</div>`;
+        advStr = `<div style="font-size:11px;color:#C6C8CA;margin-top:2px;padding-left:4px">${ar?'لم يختر فائز الترجيح':'no penalty pick made'}</div>`;
       }
     }
     return `<div class="pred-row${isMe?' pred-me':''}">
@@ -2127,8 +2159,11 @@ function isTeamEliminated(teamName){
 
 function scoreOneMatch(mid, pred, result){
   // Scores a prediction against a result.
-  // Penalties are IGNORED for score predictions — we score on 90+ET final score only.
-  // The separate "who advances" pick is handled by scoreAdvancePick().
+  // Penalties are IGNORED for the score itself — we score on 90+ET final score only.
+  // BUT: if the player predicted a draw AND picked a penalty winner (pred.pen),
+  // and the match actually went to penalties with that same winner, they get +1.
+  // This bonus only exists for players who predicted a draw — it is folded into
+  // the same prediction, not a separate always-on pick.
   if(!pred || !result) return null;
   let mult=1;
   if(mid.includes('KO_QF')) mult=2;
@@ -2144,25 +2179,27 @@ function scoreOneMatch(mid, pred, result){
   } else if(predOutcome===actualOutcome){
     pts=1*mult; label='Correct result'; labelAr='النتيجة صحيحة'; cls='result';
   }
-  return {points:pts, label, labelAr, cls, mult};
-}
-
-function scoreAdvancePick(mid, advancePick, result){
-  // Scores the separate "who advances?" pick. +1 only if:
-  // — the match result is a draw (went to penalties)
-  // — and the player's pick matches the actual penalty winner
-  if(!advancePick || !result) return {points:0, active:false};
-  const rH=result.h, rA=result.a;
-  const isDraw = rH===rA;
-  if(!isDraw || !result.pen) return {points:0, active:false}; // no penalties — pick irrelevant
-  const correct = advancePick===result.pen;
-  return {points: correct?1:0, active:true, correct};
+  // Penalty bonus: only eligible if the PLAYER predicted a draw
+  let penBonus = 0, penActive = false, penCorrect = false;
+  if(predOutcome==='D'){
+    const actualWentToPens = (rH===rA) && result.pen;
+    if(actualWentToPens){
+      penActive = true;
+      penCorrect = pred.pen && pred.pen===result.pen;
+      if(penCorrect) penBonus = 1;
+    }
+  }
+  return {points:pts+penBonus, basePoints:pts, penBonus, penActive, penCorrect, label, labelAr, cls, mult};
 }
 
 function matchTeamsFor(mid){
   if(mid && mid.startsWith('G')){
     const m = mid.match(/^G([A-L])_(\d+)_(\d+)$/);
     if(m){ const g=GROUPS[m[1]]; return [g[+m[2]], g[+m[3]]]; }
+  }
+  if(mid && mid.startsWith('KO_')){
+    // Resolve real team names via the bracket (falls back to TBD if not yet known)
+    return getKoTeams(mid);
   }
   return null;
 }
@@ -2188,24 +2225,20 @@ function playerBreakdownHTML(pname){
     const pred = preds[mid];
     const sc = scoreOneMatch(mid, pred, result);
     if(!sc) return;
-    total += sc.points;
+    total += sc.points; // already includes folded-in penalty bonus
     if(sc.cls==='exact') exact++; else if(sc.cls==='result') correct++; else missed++;
-    // Advance pick bonus — tracked separately so it can be shown on its own line
+    // Penalty bonus is part of sc — surface it as its own line if it was active
     let advBonus = null;
-    if(mid.startsWith('KO_')){
-      const ap = (state.advance_picks&&state.advance_picks[pname]) ? state.advance_picks[pname][mid] : null;
-      const asc = scoreAdvancePick(mid, ap, result);
-      if(asc.active){
-        total += asc.points;
-        const advTeamName = ap==='H' ? matchTeamsFor(mid)?.[0] : matchTeamsFor(mid)?.[1];
-        advBonus = {points: asc.points, correct: asc.correct, pickedTeam: advTeamName};
-      }
+    if(sc.penActive){
+      const koTeams = mid.startsWith('KO_') ? getKoTeams(mid) : matchTeamsFor(mid);
+      const pickedTeam = pred.pen==='H' ? koTeams?.[0] : pred.pen==='A' ? koTeams?.[1] : null;
+      advBonus = {points: sc.penBonus, correct: sc.penCorrect, pickedTeam};
     }
-    const tm = matchTeamsFor(mid);
+    const tm = mid.startsWith('KO_') ? getKoTeams(mid) : matchTeamsFor(mid);
     const penName = (pen)=> pen==='H'?(tm?tm[0]:'H') : pen==='A'?(tm?tm[1]:'A') : '';
     const predPen = pred.pen?` <span style="color:#FFA300;font-size:11px">(${ar?'الفائز بالترجيح: ':'Penalties Winner: '}${penName(pred.pen)})</span>`:'';
     const resPen = result.pen?` (${ar?'الفائز بالترجيح: ':'Penalties Winner: '}${result.pen==='H'?(tm?tm[0]:'H'):(tm?tm[1]:'A')})`:'';
-    rows.push({mid, cls:sc.cls, pts:sc.points, title:matchLabelFor(mid),
+    rows.push({mid, cls:sc.cls, pts:sc.basePoints, title:matchLabelFor(mid),
       predStr:`${pred.h}–${pred.a}${predPen}`, resStr:`${result.h}–${result.a}${resPen}`, advBonus});
   });
   // champion bonus line
@@ -2237,7 +2270,7 @@ function playerBreakdownHTML(pname){
         ? `<span class="res-chip exact" style="font-size:10px">🏆 +${r.advBonus.points}</span>`
         : `<span class="res-chip miss" style="font-size:10px">🏆 +0</span>`;
       advLine = `<div style="font-size:11px;color:#939598;margin-top:2px;display:flex;align-items:center;gap:6px">
-        <span>${ar?'اختار يتأهل:':'picked to advance:'} <strong style="color:${r.advBonus.correct?'#1D9E75':'#C53A00'}">${r.advBonus.pickedTeam||''}</strong></span>
+        <span>${ar?'توقّع فائز الترجيح:':'penalty pick:'} <strong style="color:${r.advBonus.correct?'#1D9E75':'#C53A00'}">${r.advBonus.pickedTeam||(ar?'لم يختر':'none')}</strong></span>
         ${advChip}
       </div>`;
     }
@@ -2279,14 +2312,9 @@ function renderLeaderboard(){
       if(!pred) return;
       const sc = scoreOneMatch(mid, pred, result);
       if(sc){
+        // sc.points already includes the folded-in penalty bonus
         scores[pname]=(scores[pname]||0)+sc.points;
         if(sc.cls==='exact') exactCount[pname]=(exactCount[pname]||0)+1;
-      }
-      // "Who advances" pick — stored as state.advance_picks[pname][mid]
-      if(mid.startsWith('KO_')){
-        const ap = (state.advance_picks&&state.advance_picks[pname])?state.advance_picks[pname][mid]:null;
-        const asc = scoreAdvancePick(mid, ap, result);
-        if(asc.active) scores[pname]=(scores[pname]||0)+asc.points;
       }
     });
   });
@@ -2591,13 +2619,16 @@ async function saveCurrentTab(){
         const h=document.getElementById(mid+'_h');
         const a=document.getElementById(mid+'_a');
         if(h&&h.value!==''&&a&&a.value!==''){
-          preds[mid]={h:parseInt(h.value),a:parseInt(a.value)};
+          const pred={h:parseInt(h.value),a:parseInt(a.value)};
+          // Penalty pick is only meaningful when the prediction itself is a draw
+          if(pred.h===pred.a){
+            const existing = preds[mid];
+            if(existing && existing.pen) pred.pen = existing.pen; // preserve if already chosen
+          }
+          preds[mid]=pred;
         }
       }
     });
-    // Advance picks are already live in state.advance_picks — no DOM reading needed
-    // because selectAdvance() writes to state immediately on click.
-    // Nothing extra to capture here.
   } else if(tabId==='champion'){
     const sel=document.querySelector('.champ-btn.selected');
     if(sel) state.champion_picks[currentUser.name]=sel.textContent;
