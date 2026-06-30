@@ -285,36 +285,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 
       <div class="admin-block">
-        <h3>Players & PINs</h3>
-        <table class="pin-table">
-          <thead><tr><th>Name</th><th>PIN</th><th>Predictions</th><th>Champion</th><th>Actions</th></tr></thead>
-          <tbody id="players-tbody"></tbody>
-        </table>
-        <div class="inline-form" style="margin-top:12px">
-          <input class="inline-input" type="text" id="new-name" placeholder="Player name" style="flex:1;min-width:120px"/>
-          <input class="inline-input" type="text" id="new-pin" placeholder="PIN" maxlength="4" style="width:70px" inputmode="numeric"/>
-          <button class="btn btn-sm btn-primary" onclick="addPlayer()">Add player</button>
-        </div>
-        <div id="add-player-msg" style="margin-top:8px"></div>
-        <div id="edit-player-form" style="display:none;margin-top:12px;padding:12px;background:#E8EEF8;border-radius:8px;border:1px solid #99B8E8">
-          <p style="font-size:13px;font-weight:600;color:#041E42;margin-bottom:8px">Edit player: <span id="edit-player-name-label"></span></p>
-          <div class="inline-form">
-            <input class="inline-input" type="text" id="edit-name-inp" placeholder="New name" style="flex:1;min-width:120px"/>
-            <input class="inline-input" type="text" id="edit-pin-inp" placeholder="New PIN" maxlength="4" style="width:70px" inputmode="numeric"/>
-            <button class="btn btn-sm btn-primary" onclick="saveEditPlayer()">Save</button>
-            <button class="btn btn-sm" onclick="cancelEditPlayer()">Cancel</button>
-          </div>
-          <div id="edit-player-msg" style="margin-top:8px"></div>
-        </div>
-      </div>
-
-      <div class="admin-block" id="restore-block">
-        <h3>🔧 Restore missing predictions</h3>
-        <p style="font-size:12px;color:#939598;margin-bottom:10px">One-time restore of KO R32 predictions lost from the JSON blob (Mohammed S, Khaled, Moe, Hamoudd). Only adds missing entries — never overwrites existing ones.</p>
-        <button class="btn btn-sm btn-primary" onclick="restoreMissingKoPredictions()" style="width:auto">Restore missing predictions</button>
-      </div>
-
-      <div class="admin-block">
         <h3>⚡ Matches awaiting a result</h3>
         <p style="font-size:12px;color:#939598;margin-bottom:10px">Matches that have already kicked off but have no result yet. Type the full-time score and save — fastest way to keep the leaderboard current.</p>
         <div id="awaiting-results"></div>
@@ -336,34 +306,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         </div>
         <div id="admin-pen-row" style="display:none;align-items:center;gap:8px;margin-bottom:12px;padding:10px;background:#FFF8EC;border-radius:8px;border:1px solid #FFA300">
           <span style="font-size:12px;color:#7A3F00;font-weight:600">🏆 Penalty winner:</span>
-          <button class="penalty-btn" id="admin-pen-H" onclick="selectAdminPenalty('H')" style="flex:1" id="admin-pen-H-btn">Home</button>
-          <button class="penalty-btn" id="admin-pen-A" onclick="selectAdminPenalty('A')" style="flex:1" id="admin-pen-A-btn">Away</button>
+          <button class="penalty-btn" id="admin-pen-H" onclick="selectAdminPenalty('H')" style="flex:1">Home</button>
+          <button class="penalty-btn" id="admin-pen-A" onclick="selectAdminPenalty('A')" style="flex:1">Away</button>
           <span style="font-size:11px;color:#939598">(required for drawn KO matches)</span>
         </div>
         <button class="btn btn-sm btn-primary" onclick="submitResult()" id="btn-result">Save result</button>
         <div id="result-msg" style="margin-top:10px"></div>
-      </div>
-
-      <div class="admin-block">
-        <h3>Champion winner (end of tournament)</h3>
-        <p style="font-size:12px;color:#939598;margin-bottom:10px">Once the tournament ends, select the actual champion to award +10 bonus points.</p>
-        <div style="display:flex;gap:8px;align-items:center">
-          <select id="champ-winner-select" style="flex:1;padding:8px;border:1px solid #ddd;border-radius:8px;font-size:13px;background:#fff;color:#404D4D;font-family:inherit"></select>
-          <button class="btn btn-sm btn-primary" onclick="setActualChampion()">Confirm champion</button>
-        </div>
-        <div id="champ-winner-msg" style="margin-top:8px"></div>
-      </div>
-
-      <div class="admin-block">
-        <h3>Knockout team overrides</h3>
-        <p style="font-size:12px;color:#939598;margin-bottom:10px">Fill in the TBD third-place slots below. Type the team name exactly and save — the bracket updates instantly for everyone.</p>
-        <div id="ko-overrides-list"></div>
-      </div>
-
-      <div class="admin-block">
-        <h3>Results entered</h3>
-        <p style="font-size:12px;color:#939598;margin-bottom:10px">All results currently saved. Click Reset to remove a result and re-enter it.</p>
-        <div id="results-list"></div>
       </div>
 
       <div class="admin-block">
@@ -397,6 +345,56 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
 
       <div class="admin-block">
+        <h3>Champion winner (end of tournament)</h3>
+        <p style="font-size:12px;color:#939598;margin-bottom:10px">Once the tournament ends, select the actual champion to award +10 bonus points.</p>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="champ-winner-select" style="flex:1;padding:8px;border:1px solid #ddd;border-radius:8px;font-size:13px;background:#fff;color:#404D4D;font-family:inherit"></select>
+          <button class="btn btn-sm btn-primary" onclick="setActualChampion()">Confirm champion</button>
+        </div>
+        <div id="champ-winner-msg" style="margin-top:8px"></div>
+      </div>
+
+      <div class="admin-block">
+        <button class="collapsible-header" onclick="toggleAdminSection('players')" style="width:100%;display:flex;align-items:center;justify-content:space-between;background:none;border:none;padding:0;cursor:pointer;text-align:left;font-family:inherit">
+          <h3 style="margin:0">Players & PINs</h3>
+          <span id="players-chevron" style="color:#939598;font-size:14px">▾</span>
+        </button>
+        <div id="players-section" style="display:none;margin-top:12px">
+          <table class="pin-table">
+            <thead><tr><th>Name</th><th>PIN</th><th>Predictions</th><th>Champion</th><th>Actions</th></tr></thead>
+            <tbody id="players-tbody"></tbody>
+          </table>
+          <div class="inline-form" style="margin-top:12px">
+            <input class="inline-input" type="text" id="new-name" placeholder="Player name" style="flex:1;min-width:120px"/>
+            <input class="inline-input" type="text" id="new-pin" placeholder="PIN" maxlength="4" style="width:70px" inputmode="numeric"/>
+            <button class="btn btn-sm btn-primary" onclick="addPlayer()">Add player</button>
+          </div>
+          <div id="add-player-msg" style="margin-top:8px"></div>
+          <div id="edit-player-form" style="display:none;margin-top:12px;padding:12px;background:#E8EEF8;border-radius:8px;border:1px solid #99B8E8">
+            <p style="font-size:13px;font-weight:600;color:#041E42;margin-bottom:8px">Edit player: <span id="edit-player-name-label"></span></p>
+            <div class="inline-form">
+              <input class="inline-input" type="text" id="edit-name-inp" placeholder="New name" style="flex:1;min-width:120px"/>
+              <input class="inline-input" type="text" id="edit-pin-inp" placeholder="New PIN" maxlength="4" style="width:70px" inputmode="numeric"/>
+              <button class="btn btn-sm btn-primary" onclick="saveEditPlayer()">Save</button>
+              <button class="btn btn-sm" onclick="cancelEditPlayer()">Cancel</button>
+            </div>
+            <div id="edit-player-msg" style="margin-top:8px"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="admin-block">
+        <button class="collapsible-header" onclick="toggleAdminSection('results')" style="width:100%;display:flex;align-items:center;justify-content:space-between;background:none;border:none;padding:0;cursor:pointer;text-align:left;font-family:inherit">
+          <h3 style="margin:0">Results entered</h3>
+          <span id="results-chevron" style="color:#939598;font-size:14px">▾</span>
+        </button>
+        <div id="results-section" style="display:none;margin-top:12px">
+          <p style="font-size:12px;color:#939598;margin-bottom:10px">All results currently saved. Click Reset to remove a result and re-enter it.</p>
+          <div id="results-list"></div>
+        </div>
+      </div>
+
+      <div class="admin-block">
         <h3>Google Sheet (your private data store)</h3>
         <p style="font-size:12px;color:#939598;margin-bottom:10px">Every prediction and result is saved here. Only accessible with your Google account.</p>
         <a href="https://docs.google.com/spreadsheets/d/1yzF14Kvqg5LE7JJaqZknOweDRYHBEM1YW208PsKjggs/edit" target="_blank" class="sheet-link">
@@ -405,7 +403,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
     </div>
 
-    <!-- SAVE BAR -->
+        <!-- SAVE BAR -->
     <div class="save-bar" id="save-bar">
       <div class="save-bar-inner">
         <button class="btn btn-primary" id="btn-save" onclick="saveCurrentTab()">
@@ -1621,7 +1619,7 @@ function renderKnockout(){
       card.innerHTML=`
         <div class="match-meta">
           ${ar?round.labelAr:round.label} · ${ar?'مباراة':'Match'} ${i+1}
-          ${result?`<span class="badge badge-result">${ar?'النتيجة':'Result'}: ${result.h}–${result.a}${result.pen?' (pen: '+result.pen+')':''}</span>`:''}
+          ${result?`<span class="badge badge-result">${ar?'النتيجة':'Result'}: ${result.h}–${result.a}${result.pen?' ('+(ar?'الفائز بالترجيح: ':'Penalties Winner: ')+(result.pen==='H'?koHome:koAway)+')':''}</span>`:''}
           ${koLocked&&!result?`<span class="badge badge-locked">🔒 ${ar?'مُقفل':'Locked'}</span>`:''}
           ${saved&&!result&&!koLocked?`<span class="badge badge-saved">${ar?'محفوظ':'Saved'}</span>`:''}
           ${!koLocked&&MATCH_SCHEDULE[mid]?`<span class="countdown-label" data-countdown-key="${mid}" data-match-id="${mid}" style="font-size:11px;color:#939598;margin-left:auto">${koCountdown}</span>`:''}
@@ -1749,73 +1747,6 @@ function peUpdatePenRow(){
 
 function pePen(team){ pePenPick = team; peUpdatePenRow(); }
 
-async function restoreMissingKoPredictions(){
-  // One-time restore of KO R32 predictions lost from JSON blob.
-  // Source: screenshots provided by admin on Jun 29 2026.
-  // SAFE: only adds entries that are currently missing — never overwrites existing ones.
-  const toRestore = {
-    'Mohammed S': {
-      'KO_R32_1':{h:1,a:2},'KO_R32_2':{h:2,a:0},'KO_R32_3':{h:1,a:1},
-      'KO_R32_4':{h:2,a:1},'KO_R32_5':{h:0,a:2},'KO_R32_6':{h:2,a:0},
-      'KO_R32_7':{h:2,a:0},'KO_R32_8':{h:3,a:1},'KO_R32_9':{h:1,a:1},
-      'KO_R32_10':{h:3,a:0},'KO_R32_11':{h:1,a:2},'KO_R32_12':{h:2,a:0},
-      'KO_R32_13':{h:1,a:1},'KO_R32_14':{h:2,a:0},'KO_R32_15':{h:3,a:0},'KO_R32_16':{h:2,a:0}
-    },
-    'Khaled': {
-      'KO_R32_1':{h:1,a:2},'KO_R32_2':{h:3,a:1},'KO_R32_3':{h:2,a:0},
-      'KO_R32_4':{h:2,a:2},'KO_R32_5':{h:0,a:4},'KO_R32_6':{h:3,a:0}
-      // R32_7 through R32_16 not visible in screenshot — player must re-enter
-    },
-    'Moe': {
-      'KO_R32_1':{h:1,a:2},'KO_R32_2':{h:2,a:0},'KO_R32_3':{h:1,a:0},
-      'KO_R32_4':{h:1,a:2},'KO_R32_5':{h:0,a:2},'KO_R32_6':{h:3,a:0},
-      'KO_R32_7':{h:2,a:2},'KO_R32_8':{h:2,a:0},'KO_R32_9':{h:3,a:2},
-      'KO_R32_10':{h:2,a:1},'KO_R32_11':{h:1,a:1}
-      // R32_12 through R32_16 not visible in screenshot — player must re-enter
-    },
-    'Hamoudd': {
-      'KO_R32_1':{h:0,a:1},'KO_R32_2':{h:2,a:0}
-      // Only R32_1 and R32_2 confirmed from screenshot — Hamoudd must re-enter the rest
-    }
-  };
-  let added = 0;
-  Object.entries(toRestore).forEach(([pname, preds])=>{
-    if(!state.predictions[pname]) state.predictions[pname] = {};
-    Object.entries(preds).forEach(([mid, score])=>{
-      if(!state.predictions[pname][mid]){
-        state.predictions[pname][mid] = score;
-        added++;
-      }
-    });
-  });
-  if(added === 0){
-    alert('Nothing to restore — all entries already present.');
-    return;
-  }
-  await saveStateToSheet({mergeScope:'admin'});
-  renderLeaderboard();
-  renderKnockout();
-  alert(`✓ Restored ${added} missing predictions. Khaled (R32_7–16) and Moe (R32_12–16) still need to re-enter their remaining matches.`);
-}
-
-function selectAdvance(mid, team){
-  // Store advance pick in state immediately so it survives re-renders
-  if(!state.advance_picks) state.advance_picks = {};
-  if(!state.advance_picks[currentUser.name]) state.advance_picks[currentUser.name] = {};
-  // Toggle: clicking the same button again deselects
-  if(state.advance_picks[currentUser.name][mid] === team){
-    delete state.advance_picks[currentUser.name][mid];
-  } else {
-    state.advance_picks[currentUser.name][mid] = team;
-  }
-  // Update button visual states for THIS match only — no re-render of other cards
-  const btnH = document.getElementById(mid+'_adv_H');
-  const btnA = document.getElementById(mid+'_adv_A');
-  const pick = state.advance_picks[currentUser.name][mid];
-  if(btnH) btnH.className = btnH.className.replace(/\bselected\b/g,'').trim() + (pick==='H'?' selected':'');
-  if(btnA) btnA.className = btnA.className.replace(/\bselected\b/g,'').trim() + (pick==='A'?' selected':'');
-}
-
 async function peSave(){
   const pname = document.getElementById('pe-player').value;
   const mid = document.getElementById('pe-match').value;
@@ -1892,7 +1823,7 @@ function renderMyResults(){
       const sc = scoreOneMatch(mid, pred, result);
       total += sc.points;
       if(sc.cls==='exact') exact++; else if(sc.cls==='result') correct++; else missed++;
-      const resStr = `${result.h}–${result.a}` + (result.pen?` (${ar?'ترجيح':'pen'}: ${result.pen})`:'');
+      const resStr = `${result.h}–${result.a}` + (result.pen?` (${ar?'الفائز بالترجيح: ':'Penalties Winner: '}${result.pen==='H'?homeTeam:awayTeam})`:'');
       rows.push({done:true, title, predStr, resStr, sc});
     } else {
       rows.push({done:false, title, predStr});
@@ -2259,18 +2190,23 @@ function playerBreakdownHTML(pname){
     if(!sc) return;
     total += sc.points;
     if(sc.cls==='exact') exact++; else if(sc.cls==='result') correct++; else missed++;
-    // Add advance pick bonus if applicable
+    // Advance pick bonus — tracked separately so it can be shown on its own line
+    let advBonus = null;
     if(mid.startsWith('KO_')){
       const ap = (state.advance_picks&&state.advance_picks[pname]) ? state.advance_picks[pname][mid] : null;
       const asc = scoreAdvancePick(mid, ap, result);
-      if(asc.active) total += asc.points;
+      if(asc.active){
+        total += asc.points;
+        const advTeamName = ap==='H' ? matchTeamsFor(mid)?.[0] : matchTeamsFor(mid)?.[1];
+        advBonus = {points: asc.points, correct: asc.correct, pickedTeam: advTeamName};
+      }
     }
     const tm = matchTeamsFor(mid);
     const penName = (pen)=> pen==='H'?(tm?tm[0]:'H') : pen==='A'?(tm?tm[1]:'A') : '';
-    const predPen = pred.pen?` <span style="color:#FFA300;font-size:11px">(${ar?'ترجيح':'pen'}: ${penName(pred.pen)})</span>`:'';
-    const resPen = result.pen?` (${ar?'ترجيح':'pen'}: ${result.pen})`:'';
+    const predPen = pred.pen?` <span style="color:#FFA300;font-size:11px">(${ar?'الفائز بالترجيح: ':'Penalties Winner: '}${penName(pred.pen)})</span>`:'';
+    const resPen = result.pen?` (${ar?'الفائز بالترجيح: ':'Penalties Winner: '}${result.pen==='H'?(tm?tm[0]:'H'):(tm?tm[1]:'A')})`:'';
     rows.push({mid, cls:sc.cls, pts:sc.points, title:matchLabelFor(mid),
-      predStr:`${pred.h}–${pred.a}${predPen}`, resStr:`${result.h}–${result.a}${resPen}`});
+      predStr:`${pred.h}–${pred.a}${predPen}`, resStr:`${result.h}–${result.a}${resPen}`, advBonus});
   });
   // champion bonus line
   let champLine = '';
@@ -2295,10 +2231,23 @@ function playerBreakdownHTML(pname){
     let chip = r.cls==='exact'?`<span class="res-chip exact">🎯 +${r.pts}</span>`
              : r.cls==='result'?`<span class="res-chip result">✓ +${r.pts}</span>`
              : `<span class="res-chip miss">+0</span>`;
-    return `<div class="pred-row">
-      <span class="pred-name" style="font-weight:400">${r.title}</span>
-      <span class="pred-score" style="font-size:12px">${ar?'توقّع':'pick'} ${r.predStr} · ${ar?'النتيجة':'result'} ${r.resStr}</span>
-      ${chip}
+    let advLine = '';
+    if(r.advBonus){
+      const advChip = r.advBonus.correct
+        ? `<span class="res-chip exact" style="font-size:10px">🏆 +${r.advBonus.points}</span>`
+        : `<span class="res-chip miss" style="font-size:10px">🏆 +0</span>`;
+      advLine = `<div style="font-size:11px;color:#939598;margin-top:2px;display:flex;align-items:center;gap:6px">
+        <span>${ar?'اختار يتأهل:':'picked to advance:'} <strong style="color:${r.advBonus.correct?'#1D9E75':'#C53A00'}">${r.advBonus.pickedTeam||''}</strong></span>
+        ${advChip}
+      </div>`;
+    }
+    return `<div class="pred-row" style="display:block">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="pred-name" style="font-weight:400;flex:1">${r.title}</span>
+        <span class="pred-score" style="font-size:12px">${ar?'توقّع':'pick'} ${r.predStr} · ${ar?'النتيجة':'result'} ${r.resStr}</span>
+        ${chip}
+      </div>
+      ${advLine}
     </div>`;
   }).join('');
   return summary + `<div class="pred-list">${champLine}${rowsHtml}</div>`;
@@ -2480,66 +2429,18 @@ async function arSave(mid, isKo){
   renderKnockout();
 }
 
-function renderKoOverrides(){
-  const c = document.getElementById('ko-overrides-list');
-  if(!c) return;
-  // Show only slots that currently have TBD in them
-  const tbd = 'TBD';
-  const slots = Object.entries(KO_BRACKET).filter(([mid, teams])=>
-    teams.some(t => t.startsWith('TBD'))
-  );
-  if(!slots.length){
-    c.innerHTML = `<div class="alert alert-success" style="margin:0">✓ All R32 slots are filled.</div>`;
-    return;
-  }
-  c.innerHTML = slots.map(([mid, teams]) => {
-    const ov = state.koOverrides && state.koOverrides[mid] ? state.koOverrides[mid] : {};
-    const homeIsKnown = !teams[0].startsWith('TBD');
-    const awayIsKnown = !teams[1].startsWith('TBD');
-    const homeVal = ov.home || (homeIsKnown ? teams[0] : '');
-    const awayVal = ov.away || (awayIsKnown ? teams[1] : '');
-    return `<div class="match-card" style="padding:10px 12px;margin-bottom:6px">
-      <div class="match-meta" style="font-size:12px">${mid}</div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        ${homeIsKnown
-          ? `<span style="flex:1;font-size:13px;font-weight:600;color:#041E42">${teams[0]}</span>`
-          : `<input type="text" id="kov-${mid}-h" value="${homeVal}" placeholder="Home team" class="inline-input" style="flex:1;min-width:100px;font-size:13px"/>`}
-        <span style="color:#939598;font-size:12px">vs</span>
-        ${awayIsKnown
-          ? `<span style="flex:1;font-size:13px;font-weight:600;color:#041E42">${teams[1]}</span>`
-          : `<input type="text" id="kov-${mid}-a" value="${awayVal}" placeholder="Away team" class="inline-input" style="flex:1;min-width:100px;font-size:13px"/>`}
-        <button class="btn btn-sm btn-primary" style="width:auto" onclick="saveKoOverride('${mid}',${homeIsKnown},${awayIsKnown})">Save</button>
-      </div>
-      <div id="kov-${mid}-msg" style="font-size:12px;margin-top:4px"></div>
-    </div>`;
-  }).join('');
-}
-
-async function saveKoOverride(mid, homeIsKnown, awayIsKnown){
-  const msg = document.getElementById('kov-'+mid+'-msg');
-  if(!state.koOverrides) state.koOverrides = {};
-  const curr = state.koOverrides[mid] || {};
-  if(!homeIsKnown){
-    const v = document.getElementById('kov-'+mid+'-h').value.trim();
-    if(!v){ if(msg) msg.innerHTML='<span style="color:#E35205">Enter the home team name.</span>'; return; }
-    curr.home = v;
-  }
-  if(!awayIsKnown){
-    const v = document.getElementById('kov-'+mid+'-a').value.trim();
-    if(!v){ if(msg) msg.innerHTML='<span style="color:#E35205">Enter the away team name.</span>'; return; }
-    curr.away = v;
-  }
-  state.koOverrides[mid] = curr;
-  await saveStateToSheet({mergeScope:"admin"});
-  if(msg) msg.innerHTML='<span style="color:#1D9E75">✓ Saved.</span>';
-  renderKnockout();
-  renderKoOverrides();
+function toggleAdminSection(name){
+  const section = document.getElementById(name+'-section');
+  const chevron = document.getElementById(name+'-chevron');
+  if(!section) return;
+  const open = section.style.display !== 'none';
+  section.style.display = open ? 'none' : 'block';
+  if(chevron) chevron.textContent = open ? '▾' : '▴';
 }
 
 function renderAdmin(){
   if(!currentUser.isAdmin) return;
   renderAwaitingResults();
-  renderKoOverrides();
 
   const tbody=document.getElementById('players-tbody');
   const players=Object.values(state.players);
