@@ -1812,6 +1812,12 @@ async function peClear(){
   pePenPick=null; peUpdatePenRow();
 }
 
+function groupLetterFor(mid){
+  // Returns 'A'..'L' for a group match id like 'GA_0_1', or null otherwise
+  const m = mid && mid.match(/^G([A-L])_\d+_\d+$/);
+  return m ? m[1] : null;
+}
+
 function myResultsStageFor(mid){
   // Returns {key, label, labelAr, order} for grouping matches into clear sections
   if(mid.startsWith('G')) return {key:'groups', label:'Groups', labelAr:'دور المجموعات', order:0};
@@ -2213,7 +2219,7 @@ function matchLabelFor(mid){
   return mid;
 }
 
-function playerBreakdownHTML(pname){
+function playerBreakdownHTML(pname, lbPrefix){
   // Transparent points record: ONLY matches that already have results.
   const ar=(lang==='ar');
   const preds = state.predictions[pname] || {};
@@ -2272,7 +2278,7 @@ function playerBreakdownHTML(pname){
     if(r.cls==='exact') byStage[stage.key].exact++;
   });
   // Unique id scope so multiple players' panels can each toggle independently
-  const scopeId = 'pb-' + pname.replace(/[^a-zA-Z0-9]/g,'');
+  const scopeId = 'pb-' + (lbPrefix||'x') + '-' + pname.replace(/[^a-zA-Z0-9]/g,'');
 
   const renderRow = (r) => {
     let chip = r.cls==='exact'?`<span class="res-chip exact">🎯 +${r.pts}</span>`
@@ -2302,6 +2308,27 @@ function playerBreakdownHTML(pname){
     const isGroups = group.stage.key==='groups';
     const sectionId = `${scopeId}-${group.stage.key}`;
     const startOpen = !isGroups; // Groups collapsed by default, knockout stages open
+
+    let innerHtml;
+    if(isGroups){
+      // Sub-divide the Groups stage by group letter (A, B, C...) for clarity
+      const byLetter = {};
+      group.items.forEach(r=>{
+        const letter = groupLetterFor(r.mid) || '?';
+        if(!byLetter[letter]) byLetter[letter] = [];
+        byLetter[letter].push(r);
+      });
+      innerHtml = Object.keys(byLetter).sort().map(letter=>{
+        const letterLabel = ar ? `المجموعة ${letter}` : `Group ${letter}`;
+        return `<div style="margin-top:6px">
+          <div style="font-size:11px;font-weight:700;color:#939598;text-transform:uppercase;letter-spacing:0.5px;padding:2px 4px">${letterLabel}</div>
+          ${byLetter[letter].map(renderRow).join('')}
+        </div>`;
+      }).join('');
+    } else {
+      innerHtml = group.items.map(renderRow).join('');
+    }
+
     return `<div style="margin-top:10px">
       <button onclick="togglePbStage('${sectionId}')" style="width:100%;display:flex;align-items:center;justify-content:space-between;background:#F4F5F6;border:1px solid #E6E7E8;border-radius:8px;padding:7px 10px;cursor:pointer;font-family:inherit">
         <span style="font-size:12px;font-weight:700;color:#0047BB">${ar?group.stage.labelAr:group.stage.label}</span>
@@ -2311,7 +2338,7 @@ function playerBreakdownHTML(pname){
         </span>
       </button>
       <div id="${sectionId}" style="display:${startOpen?'block':'none'};padding-top:4px">
-        ${group.items.map(renderRow).join('')}
+        ${innerHtml}
       </div>
     </div>`;
   }).join('');
@@ -2396,7 +2423,7 @@ function renderLeaderboard(){
       </div>
       <div class="lb-chevron" style="margin-left:8px;color:#939598;font-size:12px">▾</div>
     </div>
-    <div id="lb-detail-${lbPrefix}-${i}" class="detail-panel" style="display:none;margin-bottom:6px">${playerBreakdownHTML(name)}</div>`).join('');
+    <div id="lb-detail-${lbPrefix}-${i}" class="detail-panel" style="display:none;margin-bottom:6px">${playerBreakdownHTML(name, lbPrefix)}</div>`).join('');
 }
 
 function renderAwaitingResults(){
