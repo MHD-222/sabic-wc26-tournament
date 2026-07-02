@@ -52,9 +52,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .hero-live .dot{width:9px;height:9px;border-radius:50%;background:#FF5A5A;animation:heroPulse 1.1s infinite}
 @keyframes heroPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.75)}}
 .hero-pill{display:inline-block;margin-top:12px;background:#FFA300;color:#041E42;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer}
-.badge-chip{font-size:13px;margin-inline-start:2px;cursor:default}
-.pb-badges{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
-.pb-badges span{font-size:11px;font-weight:700;background:#E8F4FC;color:#0047BB;border:1px solid #B5D4F4;padding:3px 9px;border-radius:12px}
 .reveal-backdrop{position:fixed;inset:0;background:rgba(4,30,66,.78);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px}
 .reveal-card{background:#fff;border-radius:18px;max-width:340px;width:100%;padding:22px 18px;text-align:center;animation:revealIn .35s ease}
 @keyframes revealIn{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
@@ -2629,11 +2626,7 @@ function playerBreakdownHTML(pname, lbPrefix){
     </div>`;
   }).join('');
 
-  const myBadges = (_badgeCache||computeBadges())[pname]||[];
-  const badgesHtml = myBadges.length
-    ? `<div class="pb-badges">${myBadges.map(b=>`<span>${b.icon} ${ar?b.ar:b.en}</span>`).join('')}</div>`
-    : '';
-  return summary + badgesHtml + `<div class="pred-list">${champLine}</div>${stagesHtml}`;
+  return summary + `<div class="pred-list">${champLine}</div>${stagesHtml}`;
 }
 
 function togglePbStage(sectionId){
@@ -2649,62 +2642,6 @@ function toggleLbDetail(prefix, i){
   const panel = document.getElementById('lb-detail-'+prefix+'-'+i);
   if(!panel) return;
   panel.style.display = panel.style.display==='none' ? 'block' : 'none';
-}
-
-// ===== Achievement badges (pure client-side, computed from existing data) =====
-let _badgeCache = null;
-function computeBadges(){
-  const validNames = Object.values(state.players).filter(p=>p.name!=='Admin').map(p=>p.name);
-  const badges = {};
-  validNames.forEach(n=>badges[n]=[]);
-  const exactBy = {}, soleExact = {}, herdHit = {}, herdTot = {};
-  validNames.forEach(n=>{ exactBy[n]=0; soleExact[n]=false; herdHit[n]=0; herdTot[n]=0; });
-  Object.entries(state.results).forEach(([mid,result])=>{
-    if(mid==='CHAMPION_LOCKED') return;
-    const exactHere = [];
-    const outcomes = {};
-    validNames.forEach(n=>{
-      const pred = (state.predictions[n]||{})[mid];
-      if(!pred || pred.h===undefined) return;
-      const sc = scoreOneMatch(mid, pred, result);
-      if(sc && sc.cls==='exact'){ exactBy[n]++; exactHere.push(n); }
-      const oc = pred.h>pred.a?'H':pred.h<pred.a?'A':'D';
-      outcomes[n]=oc;
-    });
-    if(exactHere.length===1) soleExact[exactHere[0]]=true;
-    // Majority-agreement tally (for the herd badge)
-    const counts={H:0,D:0,A:0};
-    Object.values(outcomes).forEach(o=>counts[o]++);
-    const modal = Object.entries(counts).sort((x,y)=>y[1]-x[1])[0];
-    if(modal && modal[1]>1){
-      Object.entries(outcomes).forEach(([n,o])=>{ herdTot[n]++; if(o===modal[0]) herdHit[n]++; });
-    }
-  });
-  const champLocked = state.results['CHAMPION_LOCKED'] || isChampionLocked();
-  validNames.forEach(n=>{
-    if(exactBy[n]>=3) badges[n].push({icon:'🎯', en:'Sniper — 3+ exact scores', ar:'القنّاص — ٣ نتائج مطابقة أو أكثر'});
-    if(soleExact[n]) badges[n].push({icon:'🔮', en:'Oracle — only player to nail a score', ar:'العرّاف — الوحيد الذي أصاب نتيجة'});
-    if(champLocked){
-      const pick = state.champion_picks[n];
-      const dead = pick && (state.actual_champion ? state.actual_champion!==pick : isTeamEliminated(pick));
-      if(dead) badges[n].push({icon:'💀', en:'Champion pick eliminated', ar:'خرج مرشحه للبطولة'});
-    }
-  });
-  // Herd badge: highest majority-agreement rate, minimum 20 scored predictions
-  let bestRate = 0;
-  validNames.forEach(n=>{ if(herdTot[n]>=20){ const r=herdHit[n]/herdTot[n]; if(r>bestRate) bestRate=r; } });
-  if(bestRate>=0.6){
-    validNames.forEach(n=>{
-      if(herdTot[n]>=20 && herdHit[n]/herdTot[n]===bestRate)
-        badges[n].push({icon:'🐑', en:'With the herd — most majority picks', ar:'مع القطيع — الأكثر توقعاً مع الأغلبية'});
-    });
-  }
-  _badgeCache = badges;
-  return badges;
-}
-function badgeChipsFor(name){
-  const b = (_badgeCache||computeBadges())[name]||[];
-  return b.map(x=>`<span class="badge-chip" title="${lang==='ar'?x.ar:x.en}">${x.icon}</span>`).join('');
 }
 
 function renderLeaderboard(){
@@ -2758,7 +2695,6 @@ function renderLeaderboard(){
   if(!sorted.length){container.innerHTML=`<p style="color:#939598;font-size:14px;padding:1rem 0">${t('no_players')}</p>`;return;}
   // Champion picks are secret until the pick window locks (KO_R16_1 kickoff)
   const champLocked = state.results['CHAMPION_LOCKED'] || isChampionLocked();
-  computeBadges(); // refresh badge cache once per render
   // Podium strip (2nd — 1st — 3rd) for that trophy-ceremony feel
   let podiumHtml='';
   if(sorted.length>=3){
@@ -2784,7 +2720,7 @@ function renderLeaderboard(){
     <div class="lb-row${i<3?' podium podium-'+(i+1):''}" onclick="toggleLbDetail('${lbPrefix}',${i})" style="cursor:pointer">
       <div class="lb-rank">${medals[i]||i+1}</div>
       <div class="lb-name">
-        <div class="name">${i===0?'👑 ':''}${name}${(currentUser&&name===currentUser.name)?(lang==='ar'?' <span style="font-size:11px;color:#0047BB">(أنت)</span>':' <span style="font-size:11px;color:#0047BB">(you)</span>'):''}${exactCount[name]>0?` <span class="exact-badge">🎯 ${exactCount[name]}</span>`:''}${badgeChipsFor(name)}</div>
+        <div class="name">${i===0?'👑 ':''}${name}${(currentUser&&name===currentUser.name)?(lang==='ar'?' <span style="font-size:11px;color:#0047BB">(أنت)</span>':' <span style="font-size:11px;color:#0047BB">(you)</span>'):''}${exactCount[name]>0?` <span class="exact-badge">🎯 ${exactCount[name]}</span>`:''}</div>
         ${champLine}
       </div>
       <div class="lb-pts">
