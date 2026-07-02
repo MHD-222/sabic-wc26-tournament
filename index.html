@@ -25,7 +25,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .lang-bar{display:flex;gap:6px;justify-content:center;margin-bottom:1.5rem}
 .lang-btn{padding:6px 16px;border:1px solid #C6C8CA;border-radius:20px;font-size:13px;cursor:pointer;background:#fff;color:#939598;font-family:inherit}
 .lang-btn.active{border-color:#0047BB;color:#0047BB;background:#E8EEF8;font-weight:500}
-.nav{display:flex;gap:2px;background:#fff;border:1px solid #C6C8CA;border-radius:10px;padding:4px;margin-bottom:1.5rem;overflow-x:auto}
+.nav{display:flex;gap:2px;background:#fff;border:1px solid #C6C8CA;border-radius:10px;padding:4px;margin-bottom:1.5rem;overflow-x:auto;position:sticky;top:6px;z-index:100;box-shadow:0 2px 8px rgba(4,30,66,0.06)}
+.match-card.mc-exact{border-inline-start:4px solid #0047BB}
+.match-card.mc-result{border-inline-start:4px solid #FFA300}
+.match-card.mc-miss{border-inline-start:4px solid #E35205}
+.champ-btn.champ-out{opacity:.45;text-decoration:line-through;cursor:not-allowed}
+.podium-strip{display:flex;gap:8px;align-items:flex-end;margin-bottom:14px}
+.podium-card{flex:1;min-width:0;text-align:center;border-radius:12px;padding:10px 6px;background:#fff;border:1px solid #C6C8CA}
+.podium-card .medal{font-size:22px;line-height:1.2}
+.podium-card .pname{font-size:12px;font-weight:700;color:#041E42;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.podium-card .ppts{font-size:14px;font-weight:800;color:#0047BB}
+.podium-card.p1{border:2px solid #FFA300;background:linear-gradient(180deg,#FFF8EC,#fff);padding-top:18px}
+.podium-card.p1 .medal{font-size:28px}
+.podium-card.p2{background:linear-gradient(180deg,#F4F6F8,#fff)}
+.podium-card.p3{background:linear-gradient(180deg,#FBF1E9,#fff)}
 .nav-btn{flex:1;padding:8px 10px;font-size:13px;border:none;background:transparent;cursor:pointer;color:#939598;border-radius:7px;white-space:nowrap;font-family:inherit;font-weight:500;transition:all 0.15s;min-width:70px}
 .nav-btn.active{background:#0047BB;color:#fff}
 .tab-content{display:none}
@@ -56,13 +69,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .res-chip.result{background:#FFF3E0;color:#7A3F00;border:1px solid #FFA300}
 .res-chip.miss{background:#FDEEE8;color:#C53A00;border:1px solid #E35205}
 .res-chip.pending{background:#E6E7E8;color:#939598}
-.exact-badge{display:inline-block;font-size:11px;font-weight:700;background:#0047BB;color:#fff;padding:1px 7px;border-radius:10px;margin-left:4px;vertical-align:middle}
+.exact-badge{display:inline-block;font-size:11px;font-weight:700;background:#0047BB;color:#fff;padding:1px 7px;border-radius:10px;margin-inline-start:4px;vertical-align:middle}
 .lb-row.podium{border-radius:10px;margin-bottom:4px;padding-left:8px;padding-right:8px}
 .lb-row.podium-1{background:linear-gradient(90deg,#FFF7E0,#FFFDF5);border:1px solid #FFD24D}
 .lb-row.podium-2{background:linear-gradient(90deg,#F2F4F7,#FBFCFD);border:1px solid #D0D5DD}
 .lb-row.podium-3{background:linear-gradient(90deg,#FBEEE3,#FEFAF6);border:1px solid #E8B891}
 .pick-pop{font-size:11px;color:#939598;margin-top:6px;line-height:1.5}
-.pick-pop .seg{display:inline-block;margin-right:8px;white-space:nowrap}
+.pick-pop .seg{display:inline-block;margin-inline-end:8px;white-space:nowrap}
 .pick-pop .barwrap{display:flex;height:6px;border-radius:4px;overflow:hidden;margin-top:4px;background:#E6E7E8}
 .pick-pop .bar-h{background:#0047BB}
 .pick-pop .bar-d{background:#FFA300}
@@ -1543,7 +1556,7 @@ function renderGroups(){
         ${result?`<span class="badge badge-result">${lang==='ar'?'النتيجة':'Result'}: ${result.h}–${result.a}</span>`:''}
         ${locked&&!result?`<span class="badge badge-locked">🔒 ${lang==='ar'?'مُقفل':'Locked'}</span>`:''}
         ${saved&&!result&&!locked?`<span class="badge badge-saved">${lang==='ar'?'محفوظ':'Saved'}</span>`:''}
-        ${!locked&&countdown?`<span class="countdown-label" data-countdown-key="${schedKey}" data-match-id="${mid}" style="font-size:11px;color:#939598;margin-left:auto">${countdown}</span>`:''}
+        ${!locked&&countdown?`<span class="countdown-label" data-countdown-key="${schedKey}" data-match-id="${mid}" style="font-size:11px;color:#939598;margin-inline-start:auto">${countdown}</span>`:''}
       </div>
       <div class="match-row">
         <span class="team-name${locked&&!result?' losing':''}" style="display:flex;align-items:center;gap:5px">${logoImg(teams[i],18)} ${teams[i]}</span>
@@ -1579,6 +1592,28 @@ function renderKnockout(){
     return (new Date(a.iso).getTime() + RIYADH_OFFSET*3600000)
          - (new Date(b.iso).getTime() + RIYADH_OFFSET*3600000);
   });
+
+  // Nudge banner: open (unlocked, teams known) matches the player hasn't predicted yet
+  {
+    const tbdStr = (lang==='ar'?'لم يُحدد':'TBD');
+    let openNoPred = 0;
+    koMatches.forEach(({mid})=>{
+      if(state.results[mid] || isMatchLocked(mid)) return;
+      const [h,a] = getKoTeams(mid);
+      if(h===tbdStr || a===tbdStr) return;
+      const p = userPreds[mid];
+      if(!p || p.h===undefined || p.h==='' || p.a===undefined || p.a==='') openNoPred++;
+    });
+    if(openNoPred>0){
+      const nb=document.createElement('div');
+      nb.className='alert alert-warn';
+      nb.style.marginBottom='0.75rem';
+      nb.innerHTML = lang==='ar'
+        ? `⚠️ لديك <strong>${openNoPred}</strong> ${openNoPred===1?'مباراة مفتوحة بدون توقع':'مباريات مفتوحة بدون توقع'} — لا تنسَ الحفظ قبل الإقفال!`
+        : `⚠️ You have <strong>${openNoPred}</strong> open ${openNoPred===1?'match':'matches'} without a prediction — don't forget to save before lock!`;
+      container.appendChild(nb);
+    }
+  }
 
   let lastKoRound = null;
   let lastKoDay = null;
@@ -1624,9 +1659,9 @@ function renderKnockout(){
             const correct = myPenPick && myPenPick===result.pen;
             const note = myPenPick
               ? (correct
-                  ? `<span style="font-size:11px;color:#1D9E75;margin-left:auto;font-weight:700">✓ +1 ${ar?'نقطة':'pt'}</span>`
-                  : `<span style="font-size:11px;color:#C53A00;margin-left:auto;font-weight:700">${ar?'اختيار خاطئ':'Wrong pick'} +0</span>`)
-              : `<span style="font-size:11px;color:#939598;margin-left:auto">${ar?'لم تختر فائز الترجيح':'No penalty pick made'}</span>`;
+                  ? `<span style="font-size:11px;color:#1D9E75;margin-inline-start:auto;font-weight:700">✓ +1 ${ar?'نقطة':'pt'}</span>`
+                  : `<span style="font-size:11px;color:#C53A00;margin-inline-start:auto;font-weight:700">${ar?'اختيار خاطئ':'Wrong pick'} +0</span>`)
+              : `<span style="font-size:11px;color:#939598;margin-inline-start:auto">${ar?'لم تختر فائز الترجيح':'No penalty pick made'}</span>`;
             penRowHtml = `<div class="advance-row active">
               <span class="advance-label">🏆 ${ar?'توقّعك لفائز الترجيح:':'Your penalty pick:'} <strong>${myPenPick?(myPenPick==='H'?koHome:koAway):'—'}</strong></span>
               ${note}
@@ -1658,7 +1693,7 @@ function renderKnockout(){
           ${result?`<span class="badge badge-result">${ar?'النتيجة':'Result'}: ${result.h}–${result.a}${result.pen?' ('+(ar?'الفائز بالترجيح: ':'Penalties Winner: ')+(result.pen==='H'?koHome:koAway)+')':''}</span>`:''}
           ${koLocked&&!result?`<span class="badge badge-locked">🔒 ${ar?'مُقفل':'Locked'}</span>`:''}
           ${saved&&!result&&!koLocked?`<span class="badge badge-saved">${ar?'محفوظ':'Saved'}</span>`:''}
-          ${!koLocked&&MATCH_SCHEDULE[mid]?`<span class="countdown-label" data-countdown-key="${mid}" data-match-id="${mid}" style="font-size:11px;color:#939598;margin-left:auto">${koCountdown}</span>`:''}
+          ${!koLocked&&MATCH_SCHEDULE[mid]?`<span class="countdown-label" data-countdown-key="${mid}" data-match-id="${mid}" style="font-size:11px;color:#939598;margin-inline-start:auto">${koCountdown}</span>`:''}
         </div>
         <div class="match-row">
           <span class="team-name" style="${tbdHome?'color:#939598':'color:#041E42'};display:flex;align-items:center;gap:5px">${logoImg(koHome,18)} ${koHome}</span>
@@ -1671,6 +1706,8 @@ function renderKnockout(){
         ${matchDetailHTML(mid, koHome, koAway, koLocked, result)}`;
       container.appendChild(card);
   });
+  // Apply urgent styling to countdowns immediately (not just on the next 60s tick)
+  updateCountdownsInPlace();
 }
 
 function renderChampion(){
@@ -1688,9 +1725,11 @@ function renderChampion(){
   }
   ALL_TEAMS.forEach(team=>{
     const btn=document.createElement('button');
-    btn.className='champ-btn'+(existing===team?' selected':'');
-    btn.textContent=team;
-    btn.disabled=!!locked;
+    const out = isTeamEliminated(team);
+    btn.className='champ-btn'+(existing===team?' selected':'')+(out?' champ-out':'');
+    btn.dataset.team=team;
+    btn.innerHTML=`${flagFor(team)?flagFor(team)+' ':''}${team}${out?' <span style="color:#C53A00;font-weight:700">✕</span>':''}`;
+    btn.disabled=!!locked || out;
     btn.onclick=()=>{document.querySelectorAll('.champ-btn').forEach(b=>b.classList.remove('selected'));btn.classList.add('selected');};
     grid.appendChild(btn);
   });
@@ -1867,6 +1906,10 @@ function renderMyResults(){
       <span class="mr-stat"><span class="num">${correct}</span><span class="lbl">${ar?'نتيجة صحيحة':'Correct'}</span></span>
       <span class="mr-stat"><span class="num">${missed}</span><span class="lbl">${ar?'خطأ':'Missed'}</span></span>
       <span class="mr-stat"><span class="num">${predictedCount}/104</span><span class="lbl">${ar?'تم توقعها':'Predicted'}</span></span>
+      <div style="margin-top:8px;display:flex;align-items:center;gap:10px">
+        <button class="btn btn-sm" style="width:auto;padding:6px 14px;background:#25D366;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-family:inherit;font-size:13px" onclick="shareMyScore()">📋 ${ar?'انسخ ملخصي للواتساب':'Copy my summary for WhatsApp'}</button>
+        <span id="mr-share-msg" style="font-size:12px;color:#1D9E75;font-weight:600"></span>
+      </div>
     </div>`;
 
   if(!rows.length){
@@ -1883,12 +1926,16 @@ function renderMyResults(){
   });
 
   c.innerHTML = Object.values(byStage).sort((a,b)=>a.stage.order-b.stage.order).map(group=>{
-    const header = `<div class="group-label" style="margin-top:1.25rem">${ar?group.stage.labelAr:group.stage.label}</div>`;
+    const collapsible = group.stage.key==='groups';
+    const secId = 'mr-sec-'+group.stage.key;
+    const header = collapsible
+      ? `<div class="group-label" style="margin-top:1.25rem;cursor:pointer" onclick="toggleMrStage('${secId}')">${ar?group.stage.labelAr:group.stage.label} <span id="${secId}-chev" style="font-size:11px;color:#939598;font-weight:400">▸ ${ar?'اضغط للعرض':'tap to show'} (${group.items.length})</span></div>`
+      : `<div class="group-label" style="margin-top:1.25rem">${ar?group.stage.labelAr:group.stage.label}</div>`;
     const cardsHtml = group.items.map(r=>{
       if(r.done){
-        return `<div class="match-card">
+        return `<div class="match-card mc-${r.sc.cls}">
           <div class="match-meta">${r.title}
-            <span class="res-chip ${r.sc.cls}" style="margin-left:auto">${(ar?r.sc.labelAr:r.sc.label)} · +${r.sc.points}</span>
+            <span class="res-chip ${r.sc.cls}" style="margin-inline-start:auto">${(ar?r.sc.labelAr:r.sc.label)} · +${r.sc.points}</span>
           </div>
           <div style="display:flex;gap:16px;font-size:13px;color:#404D4D;flex-wrap:wrap">
             <span>${ar?'توقعك':'Your pick'}: <strong>${r.predStr}</strong></span>
@@ -1898,14 +1945,60 @@ function renderMyResults(){
       } else {
         return `<div class="match-card" style="opacity:0.75">
           <div class="match-meta">${r.title}
-            <span class="res-chip pending" style="margin-left:auto">${ar?'لم تُلعب بعد':'Not played yet'}</span>
+            <span class="res-chip pending" style="margin-inline-start:auto">${ar?'لم تُلعب بعد':'Not played yet'}</span>
           </div>
           <div style="font-size:13px;color:#404D4D">${ar?'توقعك':'Your pick'}: <strong>${r.predStr}</strong></div>
         </div>`;
       }
     }).join('');
-    return header + cardsHtml;
+    return header + (collapsible
+      ? `<div id="${secId}" style="display:none">${cardsHtml}</div>`
+      : cardsHtml);
   }).join('');
+}
+
+function toggleMrStage(secId){
+  const el = document.getElementById(secId);
+  const chev = document.getElementById(secId+'-chev');
+  if(!el) return;
+  const opening = el.style.display==='none';
+  el.style.display = opening ? 'block' : 'none';
+  if(chev) chev.textContent = opening ? '▾' : ('▸ ' + (lang==='ar'?'اضغط للعرض':'tap to show'));
+}
+
+function shareMyScore(){
+  if(!currentUser) return;
+  const ar = (lang==='ar');
+  // Same scoring pipeline as the leaderboard (points + exact counts)
+  const validNames = new Set(Object.values(state.players).filter(p=>p.name!=='Admin').map(p=>p.name));
+  const scores={}, exact={};
+  validNames.forEach(n=>{ scores[n]=0; exact[n]=0; });
+  Object.entries(state.results).forEach(([mid,result])=>{
+    if(mid==='CHAMPION_LOCKED') return;
+    Object.entries(state.predictions).forEach(([pname,preds])=>{
+      if(!validNames.has(pname)) return;
+      const pred = preds[mid];
+      if(!pred) return;
+      const sc = scoreOneMatch(mid, pred, result);
+      if(sc){ scores[pname]+=sc.points; if(sc.cls==='exact') exact[pname]++; }
+    });
+  });
+  if(state.actual_champion){
+    Object.entries(state.champion_picks).forEach(([p,pick])=>{ if(validNames.has(p)&&pick===state.actual_champion) scores[p]+=10; });
+  }
+  const sorted = Object.entries(scores).sort((a,b)=> b[1]-a[1] || (exact[b[0]]-exact[a[0]]) || a[0].localeCompare(b[0]));
+  const rank = sorted.findIndex(([n])=>n===currentUser.name)+1;
+  const myPts = scores[currentUser.name]||0;
+  const myEx = exact[currentUser.name]||0;
+  const rankLine = rank>0 ? (ar?`المركز: ${rank} من ${sorted.length}\n`:`Rank: ${rank}/${sorted.length}\n`) : '';
+  const txt = `🏆 SABIC SC WC26\n${currentUser.name}\n${rankLine}` +
+    (ar ? `النقاط: ${myPts}\nتوقعات مطابقة: ${myEx} 🎯` : `Points: ${myPts}\nExact scores: ${myEx} 🎯`);
+  const done = ()=>{ const el=document.getElementById('mr-share-msg'); if(el){ el.textContent = ar?'تم النسخ ✅':'Copied ✅'; setTimeout(()=>{el.textContent='';},2500); } };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(()=>prompt(ar?'انسخ يدوياً:':'Copy manually:', txt));
+  } else {
+    prompt(ar?'انسخ يدوياً:':'Copy manually:', txt);
+  }
 }
 
 function renderRules(){
@@ -2156,11 +2249,32 @@ function toggleDetail(mid){
 }
 
 function isTeamEliminated(teamName){
-  // A team counts as eliminated only if the admin has explicitly marked it
-  // (state.eliminated is an optional array). Defaults to NOT eliminated so the
-  // tie-breaker never unfairly penalises anyone when data is absent.
-  if(!state.eliminated || !Array.isArray(state.eliminated)) return false;
-  return state.eliminated.indexOf(teamName) !== -1;
+  // 1) Admin-marked list still takes priority (optional override)
+  if(state.eliminated && Array.isArray(state.eliminated) && state.eliminated.indexOf(teamName)!==-1) return true;
+  // 2) Auto-derived: team never reached the R32 bracket => out at the group stage
+  const r32Teams = new Set();
+  for(let i=1;i<=16;i++){
+    const pair = KO_BRACKET['KO_R32_'+i];
+    if(pair) pair.forEach(t=>{ if(!t.startsWith('TBD')) r32Teams.add(t); });
+  }
+  if(r32Teams.size===32 && !r32Teams.has(teamName)) return true;
+  // 3) Auto-derived: team lost a completed knockout match (incl. penalty losses)
+  for(const r of KO_ROUNDS){
+    for(let i=1;i<=r.matches;i++){
+      const mid = 'KO_'+r.id+'_'+i;
+      const res = state.results[mid];
+      if(!res) continue;
+      const [h,a] = getKoTeams(mid);
+      if(h!==teamName && a!==teamName) continue;
+      let winner = null;
+      if(res.h>res.a) winner=h;
+      else if(res.a>res.h) winner=a;
+      else if(res.pen==='H') winner=h;
+      else if(res.pen==='A') winner=a;
+      if(winner && winner!==teamName) return true;
+    }
+  }
+  return false;
 }
 
 function scoreOneMatch(mid, pred, result){
@@ -2294,7 +2408,7 @@ function playerBreakdownHTML(pname, lbPrefix){
         ${advChip}
       </div>`;
     }
-    return `<div class="pred-row" style="display:block">
+    return `<div class="pred-row" style="display:block;border-inline-start:3px solid ${r.cls==='exact'?'#0047BB':r.cls==='result'?'#FFA300':'#E35205'};padding-inline-start:8px">
       <div style="display:flex;align-items:center;gap:8px">
         <span class="pred-name" style="font-weight:400;flex:1">${r.title}</span>
         <span class="pred-score" style="font-size:12px">${ar?'توقّع':'pick'} ${r.predStr} · ${ar?'النتيجة':'result'} ${r.resStr}</span>
@@ -2410,20 +2524,44 @@ function renderLeaderboard(){
   });
   const medals=['🥇','🥈','🥉'];
   if(!sorted.length){container.innerHTML=`<p style="color:#939598;font-size:14px;padding:1rem 0">${t('no_players')}</p>`;return;}
-  container.innerHTML=sorted.map(([name,pts],i)=>`
+  // Champion picks are secret until the pick window locks (KO_R16_1 kickoff)
+  const champLocked = state.results['CHAMPION_LOCKED'] || isChampionLocked();
+  // Podium strip (2nd — 1st — 3rd) for that trophy-ceremony feel
+  let podiumHtml='';
+  if(sorted.length>=3){
+    podiumHtml = `<div class="podium-strip">` + [1,0,2].map(idx=>{
+      const [n,p]=sorted[idx];
+      return `<div class="podium-card p${idx+1}"><div class="medal">${medals[idx]}</div><div class="pname">${n}</div><div class="ppts">${p} ${t('pts')}</div></div>`;
+    }).join('') + `</div>`;
+  }
+  container.innerHTML=podiumHtml+sorted.map(([name,pts],i)=>{
+    const cPick = state.champion_picks[name];
+    const isSelf = currentUser && name===currentUser.name;
+    const champDead = cPick && (state.actual_champion ? state.actual_champion!==cPick : isTeamEliminated(cPick));
+    let champLine = '';
+    if(cPick && !champLocked && !isSelf){
+      champLine = `<div class="champ">${t('champ_pick')}: 🔒 <span style="font-size:11px">${lang==='ar'?'مخفي حتى دور الـ16':'hidden until R16'}</span></div>`;
+    } else if(cPick){
+      champLine = `<div class="champ">${t('champ_pick')}: ${champDead
+          ? `<s style="opacity:.7">${cPick}</s> <span style="color:#C53A00;font-size:11px;font-weight:700">✕ ${lang==='ar'?'أُقصي':'out'}</span>`
+          : `${cPick}${flagFor(cPick)?' '+flagFor(cPick):''}`}</div>`;
+    }
+    const gap = sorted[0][1]-pts;
+    return `
     <div class="lb-row${i<3?' podium podium-'+(i+1):''}" onclick="toggleLbDetail('${lbPrefix}',${i})" style="cursor:pointer">
       <div class="lb-rank">${medals[i]||i+1}</div>
       <div class="lb-name">
         <div class="name">${i===0?'👑 ':''}${name}${(currentUser&&name===currentUser.name)?(lang==='ar'?' <span style="font-size:11px;color:#0047BB">(أنت)</span>':' <span style="font-size:11px;color:#0047BB">(you)</span>'):''}${exactCount[name]>0?` <span class="exact-badge">🎯 ${exactCount[name]}</span>`:''}</div>
-        ${state.champion_picks[name]?`<div class="champ">${t('champ_pick')}: ${state.champion_picks[name]}</div>`:''}
+        ${champLine}
       </div>
       <div class="lb-pts">
         <div class="pts">${pts}</div>
         <div class="label">${t('pts')}</div>
+        ${i>0&&gap>0?`<div style="font-size:10px;color:#C53A00;font-weight:600">−${gap}</div>`:''}
       </div>
-      <div class="lb-chevron" style="margin-left:8px;color:#939598;font-size:12px">▾</div>
+      <div class="lb-chevron" style="margin-inline-start:8px;color:#939598;font-size:12px">▾</div>
     </div>
-    <div id="lb-detail-${lbPrefix}-${i}" class="detail-panel" style="display:none;margin-bottom:6px">${playerBreakdownHTML(name, lbPrefix)}</div>`).join('');
+    <div id="lb-detail-${lbPrefix}-${i}" class="detail-panel" style="display:none;margin-bottom:6px">${playerBreakdownHTML(name, lbPrefix)}</div>`;}).join('');
 }
 
 function renderAwaitingResults(){
@@ -2548,7 +2686,7 @@ function renderAdmin(){
       <td>${Object.keys(state.predictions[p.name]||{}).length}</td>
       <td style="color:#0047BB">${state.champion_picks[p.name]||'—'}</td>
       <td style="white-space:nowrap">
-        <button class="btn btn-sm" onclick="editPlayer('${p.name.replace(/'/g,"\\'")}')" style="border-color:#0047BB;color:#0047BB;padding:3px 8px;font-size:11px;margin-right:4px">Edit</button>
+        <button class="btn btn-sm" onclick="editPlayer('${p.name.replace(/'/g,"\\'")}')" style="border-color:#0047BB;color:#0047BB;padding:3px 8px;font-size:11px;margin-inline-end:4px">Edit</button>
         ${!(p.isAdmin===true || p.name==='Admin')?`<button class="btn btn-sm" onclick="removePlayer('${p.name.replace(/'/g,"\\'")}')" style="border-color:#E35205;color:#E35205;padding:3px 8px;font-size:11px">Remove</button>`:''}
       </td>
     </tr>`).join(''):`<tr><td colspan="5" style="color:#939598;padding:8px">${t('no_players')}</td></tr>`;
@@ -2614,14 +2752,14 @@ function renderAdmin(){
   }
 }
 
-function addPlayer(){
+async function addPlayer(){
   const name=document.getElementById('new-name').value.trim();
   const pin=document.getElementById('new-pin').value.trim();
   const msg=document.getElementById('add-player-msg');
   if(!name||pin.length!==4){msg.innerHTML=`<span class="alert alert-error" style="display:inline-block">Enter a name and a 4-digit PIN.</span>`;return;}
   if(Object.values(state.players).find(p=>p.name.toLowerCase()===name.toLowerCase())){msg.innerHTML=`<span class="alert alert-error" style="display:inline-block">A player with that name already exists.</span>`;return;}
   state.players[name]={name,pin};
-  saveStateToSheet({mergeScope:"admin"});
+  await saveStateToSheet({mergeScope:"admin"});
   renderAdmin();
   renderLeaderboard();
   document.getElementById('new-name').value='';
@@ -2635,7 +2773,12 @@ async function submitResult(){
   const h=parseInt(document.getElementById('res-h').value);
   const a=parseInt(document.getElementById('res-a').value);
   const btn=document.getElementById('btn-result');
-  btn.disabled=true; btn.innerHTML='<span class="spinner"></span>';
+  const msg=document.getElementById('result-msg');
+  if(isNaN(h)||isNaN(a)){
+    msg.innerHTML=`<div class="alert alert-error">Enter both scores.</div>`;
+    setTimeout(()=>{msg.innerHTML='';},3000);
+    return;
+  }
   const result={h,a};
   // capture penalty winner if draw
   if(h===a){
@@ -2643,11 +2786,17 @@ async function submitResult(){
     const penA=document.getElementById('admin-pen-A');
     if(penH&&penH.classList.contains('selected')) result.pen='H';
     else if(penA&&penA.classList.contains('selected')) result.pen='A';
+    else if(mid.startsWith('KO_')){
+      // A knockout draw MUST have a shootout winner or the next round can't populate
+      msg.innerHTML=`<div class="alert alert-warn">This is a knockout match — pick the penalty shootout winner before saving.</div>`;
+      setTimeout(()=>{msg.innerHTML='';},4000);
+      return;
+    }
   }
+  btn.disabled=true; btn.innerHTML='<span class="spinner"></span>';
   state.results[mid]=result;
   await saveStateToSheet({mergeScope:"admin"});
   btn.disabled=false; btn.textContent='Save result';
-  const msg=document.getElementById('result-msg');
   const matchLabel = document.getElementById('result-select').options[document.getElementById('result-select').selectedIndex].text;
   msg.innerHTML=`<div class="alert alert-success">✓ Result saved: ${h}–${a}. Leaderboard updated.</div>`;
   renderLeaderboard(); renderGroups(); renderKnockout(); renderAdmin();
@@ -2700,7 +2849,7 @@ async function saveCurrentTab(){
     });
   } else if(tabId==='champion'){
     const sel=document.querySelector('.champ-btn.selected');
-    if(sel) state.champion_picks[currentUser.name]=sel.textContent;
+    if(sel) state.champion_picks[currentUser.name]=sel.dataset.team||sel.textContent;
   }
   state.predictions[currentUser.name]=preds;
   await saveStateToSheet({mergeScope:"player"});
@@ -2851,6 +3000,11 @@ function updateCountdownsInPlace() {
       el.textContent = '🔒 Locked';
       el.className = 'badge badge-locked';
       el.removeAttribute('style');
+    } else if (ms < 3*3600000) {
+      // Locking soon — make it impossible to miss
+      el.textContent = '⏳ ' + formatCountdown(ms);
+      el.style.color = '#C53A00';
+      el.style.fontWeight = '700';
     } else {
       el.textContent = formatCountdown(ms);
     }
@@ -2871,8 +3025,26 @@ async function init(){
   setInterval(async () => {
     const loginVisible = document.getElementById('screen-login') && document.getElementById('screen-login').style.display !== 'none';
     const lbVisible = document.getElementById('panel-leaderboard') && document.getElementById('panel-leaderboard').style.display === 'block';
-    if (loginVisible && lbVisible) {
-      try { const latest = await loadRawState(); if (latest && latest.players) { state = latest; renderLeaderboard(); } } catch(e){}
+    // Also refresh for logged-in players while they're viewing the Leaderboard tab
+    // (safe: that tab has no input fields, so no typed-but-unsaved data can be lost)
+    const mainLbEl = document.getElementById('tab-leaderboard');
+    const mainLbActive = !!currentUser && mainLbEl && mainLbEl.classList.contains('active');
+    if ((loginVisible && lbVisible) || mainLbActive) {
+      try {
+        const latest = await loadRawState();
+        if (latest && latest.players) {
+          // Preserve the logged-in player's OWN predictions object: selectKoPenalty()
+          // writes pen picks into state before saving, and saveCurrentTab() reads
+          // pen back from state — a wholesale replace would silently drop an
+          // unsaved pen pick. Everyone else's data + results come from the server.
+          if (currentUser && state.predictions && state.predictions[currentUser.name]) {
+            if (!latest.predictions) latest.predictions = {};
+            latest.predictions[currentUser.name] = state.predictions[currentUser.name];
+          }
+          state = latest;
+          renderLeaderboard();
+        }
+      } catch(e){}
     }
   }, 120 * 1000);
 }
