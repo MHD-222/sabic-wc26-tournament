@@ -60,6 +60,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .reveal-score span:nth-child(3){animation-delay:.18s}
 @keyframes digitFlip{from{transform:rotateX(90deg);opacity:0}to{transform:rotateX(0);opacity:1}}
 #confetti-canvas{position:fixed;inset:0;pointer-events:none;z-index:1001}
+#wrap-overlay{position:fixed;inset:0;z-index:1100;color:#fff;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent;background:radial-gradient(ellipse at 20% -10%,rgba(0,138,255,.35),transparent 55%),radial-gradient(ellipse at 80% -10%,rgba(255,163,0,.22),transparent 55%),linear-gradient(160deg,#041E42 0%,#062A5C 55%,#0A3A8C 130%)}
+.wrap-dots{position:absolute;top:14px;left:16px;right:52px;display:flex;gap:5px;z-index:10}
+.wrap-dots i{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.22)}
+.wrap-dots i.on{background:#FFA300}
+.wrap-close{position:absolute;top:8px;inset-inline-end:12px;z-index:11;background:rgba(255,255,255,.15);border:none;color:#fff;width:32px;height:32px;border-radius:50%;font-size:16px;cursor:pointer}
+.wrap-slide{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:44px 26px;opacity:0;pointer-events:none;transition:opacity .4s ease;direction:rtl}
+.wrap-slide.active{opacity:1;pointer-events:auto}
+.wrap-kicker{font-size:12px;letter-spacing:3px;color:#8FB3E8;font-weight:700;margin-bottom:14px}
+.wrap-big{font-size:32px;font-weight:800;line-height:1.4}
+.wrap-huge{font-size:60px;font-weight:800;color:#FFA300;line-height:1.1}
+.wrap-mid{font-size:18px;font-weight:700;line-height:1.7}
+.wrap-sub{font-size:13px;color:#9DB8E4;margin-top:8px;line-height:1.7}
+.wrap-expl{font-size:11px;color:#6E88B6;margin-bottom:10px;line-height:1.6}
+.wrap-tile{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:13px 18px;margin-top:14px;max-width:330px;width:100%}
+.wrap-gold{color:#FFA300}.wrap-red{color:#FF7B6B}.wrap-green{color:#5DE0A5}
+.wrap-tap{position:absolute;bottom:20px;left:0;right:0;text-align:center;font-size:12px;color:#6E88B6;animation:tapPulse 1.6s infinite}
+@keyframes tapPulse{0%,100%{opacity:.9}50%{opacity:.3}}
+.wrap-btn{background:#FFA300;color:#041E42;border:none;font-family:inherit;font-size:15px;font-weight:800;padding:13px 28px;border-radius:30px;margin-top:18px;cursor:pointer}
+.wrap-btn.ghost{background:transparent;color:#9DB8E4;border:1px solid rgba(255,255,255,.25);font-weight:600;font-size:13px;padding:9px 20px}
+#wrap-card-img{max-width:220px;width:58%;border-radius:14px;margin-top:12px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.wrap-banner{background:linear-gradient(135deg,#FFA300,#FFC24D);color:#041E42;border-radius:14px;padding:14px 16px;margin-bottom:12px;font-weight:800;font-size:15px;cursor:pointer;text-align:center;box-shadow:0 4px 16px rgba(255,163,0,.35)}
+.wrap-banner small{display:block;font-weight:600;font-size:12px;margin-top:2px;opacity:.85}
 .nav-btn{flex:1;padding:8px 10px;font-size:13px;border:none;background:transparent;cursor:pointer;color:#939598;border-radius:7px;white-space:nowrap;font-family:inherit;font-weight:500;transition:all 0.15s;min-width:70px}
 .nav-btn.active{background:#0047BB;color:#fff}
 .tab-content{display:none}
@@ -626,8 +648,8 @@ const MATCH_SCHEDULE = {
   'KO_R16_2': '2026-07-04T21:00:00Z',
   'KO_R16_3': '2026-07-05T20:00:00Z',
   'KO_R16_4': '2026-07-06T00:00:00Z',
-  'KO_R16_5': '2026-07-06T19:00:00Z',
-  'KO_R16_6': '2026-07-07T00:00:00Z',
+  'KO_R16_5': '2026-07-07T00:00:00Z',
+  'KO_R16_6': '2026-07-06T19:00:00Z',
   'KO_R16_7': '2026-07-07T16:00:00Z',
   'KO_R16_8': '2026-07-07T20:00:00Z',
 
@@ -1225,6 +1247,12 @@ function doLogin(){
   if(currentUser.isAdmin) renderAdmin();
   startAutoFetch();
   checkResultReveals();
+  // Auto-open Wrapped once per player after the champion is crowned
+  if(state.actual_champion){
+    let seen=null;
+    try{ seen=localStorage.getItem('wc26_wrapped_seen_'+currentUser.name); }catch(e){}
+    if(!seen) setTimeout(openWrapped, 900);
+  }
 }
 
 
@@ -1876,6 +1904,502 @@ function launchConfetti(){
     if(Date.now()-t0<2600) requestAnimationFrame(tick);
     else cv.remove();
   })();
+}
+
+// ===== WC26 WRAPPED: stats engine (pure read-only computation) =====
+const AR_MONTHS=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+function wrapDayKey(iso){ return new Date(new Date(iso).getTime()+3*3600000).toISOString().slice(0,10); }
+function wrapDayLabel(key){ const p=key.split('-'); return parseInt(p[2])+' '+AR_MONTHS[parseInt(p[1])-1]; }
+function wrapValidPlayers(){ return Object.values(state.players).filter(p=>p.name!=='Admin').map(p=>p.name); }
+function wrapScoredMids(){ return Object.keys(state.results).filter(m=>m!=='CHAMPION_LOCKED' && MATCH_SCHEDULE[m]); }
+
+function computeWrapped(pname){
+  const players = wrapValidPlayers();
+  const mids = wrapScoredMids().sort((a,b)=>new Date(MATCH_SCHEDULE[a])-new Date(MATCH_SCHEDULE[b]));
+  const P = state.predictions;
+  const my = P[pname]||{};
+  const W = {name:pname, players:players.length};
+
+  // ---- per-match scoring for everyone (single pass) ----
+  const sc = {}; // sc[mid][name] = {points, cls, mult}
+  const totals = {}, exacts = {};
+  players.forEach(n=>{ totals[n]=0; exacts[n]=0; });
+  mids.forEach(mid=>{
+    sc[mid]={};
+    const res=state.results[mid];
+    players.forEach(n=>{
+      const pr=(P[n]||{})[mid];
+      if(!pr||pr.h===undefined||pr.h==='') return;
+      const s=scoreOneMatch(mid,pr,res);
+      if(!s) return;
+      sc[mid][n]=s;
+      totals[n]+=s.points;
+      if(s.cls==='exact') exacts[n]++;
+    });
+  });
+  if(state.actual_champion){
+    players.forEach(n=>{ if(state.champion_picks[n]===state.actual_champion) totals[n]+=10; });
+  }
+  const finalSorted = players.slice().sort((a,b)=> totals[b]-totals[a] || exacts[b]-exacts[a] || a.localeCompare(b));
+  W.rank = finalSorted.indexOf(pname)+1;
+  W.pts = totals[pname]||0;
+  const gapTop = totals[finalSorted[0]]-W.pts;
+  W.marginLine = W.rank===1 ? ('بفارق '+(W.pts-(totals[finalSorted[1]]||0))+' نقاط عن الوصيف')
+                            : (gapTop+' نقاط عن اللقب');
+
+  // ---- numbers ----
+  let ex=0,cr=0,ms=0;
+  mids.forEach(mid=>{ const s=sc[mid][pname]; if(!s) return; if(s.cls==='exact')ex++; else if(s.cls==='result')cr++; else ms++; });
+  const scored=ex+cr+ms;
+  W.nums={exact:ex,correct:cr,miss:ms,scored,acc:scored?Math.round((ex+cr)/scored*100):0};
+  W.nums.exactBetter = players.filter(n=>n!==pname && exacts[n]<ex).length;
+  const accRank = players.slice().sort((a,b)=>{
+    const A=(()=>{let e=0,c=0,t=0;mids.forEach(m=>{const s=sc[m][a];if(!s)return;t++;if(s.cls!=='miss')(s.cls==='exact'?e++:c++);});return t?(e+c)/t:0;})();
+    const B=(()=>{let e=0,c=0,t=0;mids.forEach(m=>{const s=sc[m][b];if(!s)return;t++;if(s.cls!=='miss')(s.cls==='exact'?e++:c++);});return t?(e+c)/t:0;})();
+    return B-A;
+  }).indexOf(pname)+1;
+  W.nums.accTier = accRank<=Math.ceil(players.length/3)?'a':(accRank<=Math.ceil(players.length*2/3)?'b':'c');
+
+  // ---- rank journey (day-by-day replay) ----
+  const days=[]; const byDay={};
+  mids.forEach(mid=>{ const k=wrapDayKey(MATCH_SCHEDULE[mid]); if(!byDay[k]){byDay[k]=[];days.push(k);} byDay[k].push(mid); });
+  const cum={}, cumEx={};
+  players.forEach(n=>{cum[n]=0;cumEx[n]=0;});
+  const myRanks=[]; const rivalSeries={};
+  players.forEach(n=>rivalSeries[n]=[]);
+  days.forEach(k=>{
+    byDay[k].forEach(mid=>{ players.forEach(n=>{ const s=sc[mid][n]; if(s){cum[n]+=s.points; if(s.cls==='exact')cumEx[n]++;} }); });
+    const order=players.slice().sort((a,b)=> cum[b]-cum[a] || cumEx[b]-cumEx[a] || a.localeCompare(b));
+    myRanks.push({day:k, rank:order.indexOf(pname)+1});
+    players.forEach(n=>rivalSeries[n].push(cum[n]));
+  });
+  if(myRanks.length){
+    let best=myRanks[0], worst=myRanks[0], glory=null;
+    myRanks.forEach((r,i)=>{
+      if(r.rank<best.rank) best=r;
+      if(r.rank>worst.rank) worst=r;
+      if(i>0){ const jump=myRanks[i-1].rank-r.rank; if(jump>0 && (!glory||jump>glory.jump)) glory={day:r.day,jump}; }
+    });
+    W.journey={best:{rank:best.rank,day:wrapDayLabel(best.day)}, worst:{rank:worst.rank,day:wrapDayLabel(worst.day)}, glory:glory?{day:wrapDayLabel(glory.day),jump:glory.jump}:null, series:myRanks.map(r=>r.rank)};
+  }
+
+  // ---- signature: favorite scoreline / draws / optimism ----
+  const lineCount={};
+  Object.entries(my).forEach(([mid,pr])=>{ if(pr&&pr.h!==undefined&&pr.h!=='') { const k=pr.h+'–'+pr.a; lineCount[k]=(lineCount[k]||0)+1; } });
+  const fav=Object.entries(lineCount).sort((a,b)=>b[1]-a[1])[0];
+  W.fav = (fav&&fav[1]>=3)?{score:fav[0],count:fav[1]}:null;
+  let predDraws=0, actDraws=0, myGoals=0, realGoals=0, gN=0;
+  mids.forEach(mid=>{
+    const res=state.results[mid];
+    if(res.h===res.a) actDraws++;
+    const pr=my[mid];
+    if(pr&&pr.h!==undefined&&pr.h!==''){
+      if(+pr.h===+pr.a) predDraws++;
+      myGoals+=(+pr.h)+(+pr.a); realGoals+=res.h+res.a; gN++;
+    }
+  });
+  W.draw = actDraws>=4 ? (predDraws<=actDraws*0.4?{type:'allergy',pred:predDraws,act:actDraws}:(predDraws>=Math.max(6,actDraws*1.5)?{type:'lover',pred:predDraws,act:actDraws}:null)) : null;
+  if(gN>=10){
+    const mine=+(myGoals/gN).toFixed(1), real=+(realGoals/gN).toFixed(1);
+    W.opt={mine,real,type: mine-real>=0.4?'d':(real-mine>=0.4?'e':'f')};
+  } else W.opt=null;
+
+  // ---- boldest correct call (ضربة معلم) ----
+  let bold=null;
+  mids.forEach(mid=>{
+    const s=sc[mid][pname];
+    if(!s||s.cls!=='exact') return;
+    const pr=my[mid];
+    let others=0;
+    players.forEach(n=>{ if(n===pname) return; const o=(P[n]||{})[mid]; if(o&&+o.h===+pr.h&&+o.a===+pr.a) others++; });
+    if(!bold||others<bold.others||(others===bold.others&&s.mult>bold.mult)) bold={mid,others,mult:s.mult,score:pr.h+'–'+pr.a};
+  });
+  if(bold){ bold.label=matchLabelFor(bold.mid); bold.stage=myResultsStageFor(bold.mid).labelAr; }
+  else {
+    let top=null;
+    mids.forEach(mid=>{ const s=sc[mid][pname]; if(s&&s.points>0&&(!top||s.points>top.points)) top={mid,points:s.points}; });
+    if(top) bold={fallback:true,mid:top.mid,label:matchLabelFor(top.mid),points:top.points};
+  }
+  W.bold=bold;
+
+  // ---- heartbreak: the miss + champion fate ----
+  let heart=null;
+  mids.forEach(mid=>{
+    const s=sc[mid][pname];
+    if(!s||s.points>0) return;
+    let n=0,fieldPts=0;
+    players.forEach(o=>{ if(o===pname) return; const os=sc[mid][o]; if(os&&os.points>0){n++;fieldPts+=os.points;} });
+    if(n>0&&(!heart||n>heart.n||(n===heart.n&&fieldPts>heart.fieldPts))) heart={mid,n,fieldPts};
+  });
+  if(heart) heart.label=matchLabelFor(heart.mid);
+  W.heart=heart;
+  const pick=state.champion_picks[pname];
+  if(pick){
+    const c={team:pick};
+    if(state.actual_champion===pick) c.type='win';
+    else {
+      let lostAt=null;
+      for(const r of KO_ROUNDS){
+        for(let i=1;i<=r.matches;i++){
+          const mid='KO_'+r.id+'_'+i, res=state.results[mid];
+          if(!res) continue;
+          const [h,a]=getKoTeams(mid);
+          if(h!==pick&&a!==pick) continue;
+          let w=null;
+          if(res.h>res.a)w=h; else if(res.a>res.h)w=a; else if(res.pen==='H')w=h; else if(res.pen==='A')w=a;
+          if(w&&w!==pick) lostAt={round:r, pens:res.h===res.a, final:r.id==='F'};
+        }
+      }
+      if(lostAt) c.type=lostAt.final?'final':'ko', c.round=lostAt.round.labelAr, c.pens=lostAt.pens;
+      else {
+        const r32=new Set(); for(let i=1;i<=16;i++){(KO_BRACKET['KO_R32_'+i]||[]).forEach(t=>{if(!t.startsWith('TBD'))r32.add(t);});}
+        c.type=(r32.size===32&&!r32.has(pick))?'groups':'alive';
+      }
+    }
+    W.champ=c;
+  } else W.champ=null;
+
+  // ---- twin ----
+  let twin=null;
+  players.forEach(n=>{
+    if(n===pname) return;
+    let m=0;
+    Object.entries(my).forEach(([mid,pr])=>{
+      if(!pr||pr.h===undefined||pr.h==='') return;
+      const o=(P[n]||{})[mid];
+      if(o&&+o.h===+pr.h&&+o.a===+pr.a) m++;
+    });
+    if(!twin||m>twin.count) twin={name:n,count:m};
+  });
+  W.twin=(twin&&twin.count>=10)?twin:null;
+
+  // ---- quick-fire pool ----
+  const q=[];
+  let oneGoal=0;
+  mids.forEach(mid=>{ const pr=my[mid],res=state.results[mid]; const s=sc[mid][pname];
+    if(!pr||pr.h===undefined||pr.h===''||!s||s.cls==='exact') return;
+    if(Math.abs(+pr.h-res.h)+Math.abs(+pr.a-res.a)===1) oneGoal++;
+  });
+  if(oneGoal>=5) q.push({score:oneGoal, line:oneGoal+' مرة كنت على بُعد هدف واحد من المطابقة. حرقة 🔥', expl:'توقعات كانت تفرق عن النتيجة الحقيقية بهدف واحد بس'});
+  let streak=0,best=0,drought=0,worstD=0;
+  mids.forEach(mid=>{ const s=sc[mid][pname]; if(!s) return;
+    if(s.points>0){streak++;drought=0;} else {drought++;streak=0;}
+    if(streak>best)best=streak; if(drought>worstD)worstD=drought;
+  });
+  if(best>=5) q.push({score:best*1.5, line:best+' مباريات ورا بعض وأنت تجيب نقاط. كنت بفورمة 📈', expl:'أطول عدد مباريات متتالية جبت فيها نقاط'});
+  if(worstD>=5) q.push({score:worstD*1.5, line:worstD+' مباريات ولا نقطة... قحط 🌵 الله يعوض', expl:'أطول عدد مباريات متتالية بدون أي نقطة'});
+  const teamLost={},teamWon={};
+  mids.forEach(mid=>{ const s=sc[mid][pname]; if(!s) return;
+    const tm=matchTeamsFor(mid)||[];
+    tm.forEach(t=>{ if(!t) return;
+      if(s.points===0) teamLost[t]=(teamLost[t]||0)+s.mult;
+      else teamWon[t]=(teamWon[t]||0)+s.points;
+    });
+  });
+  const nem=Object.entries(teamLost).sort((a,b)=>b[1]-a[1])[0];
+  if(nem&&nem[1]>=4) q.push({score:nem[1], line:nem[0]+' ضيّع عليك '+nem[1]+' نقطة هالبطولة. مقاطعة؟ 🚫', expl:'الفريق اللي خسرت معه أكثر نقاط'});
+  const luck=Object.entries(teamWon).sort((a,b)=>b[1]-a[1])[0];
+  if(luck&&luck[1]>=8) q.push({score:luck[1]*0.8, line:luck[0]+' جابوا لك '+luck[1]+' نقطة. حطهم بالقلب ❤️', expl:'الفريق اللي كسبت معه أكثر نقاط'});
+  let chaos=null;
+  mids.forEach(mid=>{ const pr=my[mid],res=state.results[mid],s=sc[mid][pname];
+    if(!pr||pr.h===undefined||pr.h===''||!s||s.points>0) return;
+    const err=Math.abs((+pr.h+ +pr.a)-(res.h+res.a));
+    if(err>=4&&(!chaos||err>chaos.err)) chaos={err,pred:pr.h+'–'+pr.a,real:res.h+'–'+res.a};
+  });
+  if(chaos) q.push({score:chaos.err*2, line:'توقعت '+chaos.pred+'... وطلعت '+chaos.real+'. وش كنت شارب؟ 😂', expl:null});
+  days.forEach(k=>{
+    const played=byDay[k].filter(m=>sc[m][pname]);
+    if(played.length>=3 && played.every(m=>sc[m][pname].points>0))
+      q.push({score:played.length*2, line:wrapDayLabel(k)+': نقاط بكل مباراة لعبت ذاك اليوم. يوم تاريخي 🗓️', expl:null});
+  });
+  let lone=0;
+  mids.forEach(mid=>{ const pr=my[mid],res=state.results[mid],s=sc[mid][pname];
+    if(!pr||pr.h===undefined||pr.h===''||!s||s.points===0) return;
+    const oc=+pr.h>+pr.a?'H':(+pr.h<+pr.a?'A':'D');
+    const ro=res.h>res.a?'H':(res.h<res.a?'A':'D');
+    if(oc!==ro) return;
+    let alone=true;
+    players.forEach(n=>{ if(n===pname||!alone) return; const o=(P[n]||{})[mid]; if(!o||o.h===undefined) return;
+      const ooc=+o.h>+o.a?'H':(+o.h<+o.a?'A':'D'); if(ooc===oc) alone=false; });
+    if(alone) lone++;
+  });
+  if(lone>=2) q.push({score:lone*4, line:'خالفت القروب كله '+lone+' مرات... وطلعت صح. راعي رأي 💪', expl:'مرات خالفت توقع أغلبية القروب وطلعت أنت الصح'});
+  let penT=0,penC=0;
+  mids.forEach(mid=>{ const res=state.results[mid]; if(!(res.h===res.a&&res.pen)) return;
+    const pr=my[mid]; if(!pr||!pr.pen) return; penT++; if(pr.pen===res.pen) penC++; });
+  if(penT>=3) q.push({score:penC*2, line:'ركلات الترجيح: '+penC+' من '+penT+' صح. أعصابك ثلج 🧊', expl:'دقتك في توقع الفائز بركلات الترجيح'});
+  W.quick=q.sort((a,b)=>b.score-a.score).slice(0,3);
+
+  // ---- duel ----
+  const rivals=finalSorted.filter(n=>n!==pname);
+  let rival=null;
+  rivals.forEach(n=>{ const d=Math.abs(totals[n]-W.pts); if(!rival||d<rival.d) rival={name:n,d,pts:totals[n]}; });
+  if(rival){
+    const meIdx=players.indexOf(pname), rvSeries=rivalSeries[rival.name], mySeries=rivalSeries[pname];
+    let led=0; mySeries.forEach((v,i)=>{ if(v>rvSeries[i]) led++; });
+    W.duel={name:rival.name, led, days:days.length, above:W.rank<finalSorted.indexOf(rival.name)+1, margin:rival.d};
+  } else W.duel=null;
+
+  // ---- best round & medal line ----
+  const roundPts={};
+  mids.forEach(mid=>{ const s=sc[mid][pname]; if(!s||!s.points) return;
+    const st=myResultsStageFor(mid); roundPts[st.labelAr]=(roundPts[st.labelAr]||0)+s.points; });
+  const br=Object.entries(roundPts).sort((a,b)=>b[1]-a[1])[0];
+  W.bestRound=br?br[0]:'—';
+  W.medalLine = W.rank===1?'بطل القروب 👑 — ترى التواضع زينة'
+    : W.rank===players.length?'الأخير 🌹 بس القلوب بيضاء — وكأس 2030 لك إن شاء الله'
+    : W.rank<=3?'على المنصة 🥈 قدها وقدود'
+    : 'وسط الطابور... موسم بناء 🧱 نشوفك فوق 2030';
+  return W;
+}
+
+// ===== WC26 WRAPPED: slides + share cards =====
+let _wrapState=null;
+function buildWrappedSlides(W){
+  const S=[];
+  S.push(`<div class="wrap-kicker">SABIC SC · WC26 WRAPPED</div>
+    <div class="wrap-big">39 يوم.<br>104 مباراة.<br>بطل واحد.</div>
+    <div class="wrap-mid" style="margin-top:24px">تعال نشوف رحلتك يا <span class="wrap-gold">${W.name}</span> 👇</div>`);
+  if(W.journey){
+    const s=W.journey.series, n=s.length, maxR=Math.max(...s,W.players);
+    const ptsStr=s.map((r,i)=>`${10+(i*(300/Math.max(n-1,1)))},${10+((r-1)/(maxR-1||1))*95}`).join(' ');
+    S.push(`<div class="wrap-kicker">رحلتك في الترتيب</div>
+      <svg viewBox="0 0 320 120" style="width:100%;max-width:320px;height:110px;direction:ltr">
+        <line x1="0" y1="110" x2="320" y2="110" stroke="rgba(255,255,255,.15)"/>
+        <polyline fill="none" stroke="#FFA300" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${ptsStr}"/>
+      </svg>
+      <div class="wrap-mid">أفضل مركز: <span class="wrap-gold">${W.journey.best.rank}</span> — (${W.journey.best.day})</div>
+      <div class="wrap-mid">أسوأ مركز: <span class="wrap-red">${W.journey.worst.rank}</span> — (${W.journey.worst.day})</div>
+      ${W.journey.glory?`<div class="wrap-tile"><div class="wrap-mid">⚡ يوم المجد: ${W.journey.glory.day} — قفزت <span class="wrap-gold">${W.journey.glory.jump}</span> مراكز في يوم واحد</div></div>`:''}`);
+  }
+  const tierLine=W.nums.accTier==='a'?'عين الصقر 🦅 ما شاء الله':W.nums.accTier==='b'?'لا شينة ولا زينة... مثل قهوة المكتب ☕':'المهم المشاركة... صح؟ 🙂';
+  S.push(`<div class="wrap-kicker">أرقامك</div>
+    <div class="wrap-huge">${W.pts}</div><div class="wrap-mid">نقطة</div>
+    <div style="display:flex;gap:9px;margin-top:20px">
+      <div class="wrap-tile" style="margin:0;padding:10px 13px"><div style="font-size:22px;font-weight:800">🎯 ${W.nums.exact}</div><div class="wrap-sub" style="margin-top:2px">مطابقة</div></div>
+      <div class="wrap-tile" style="margin:0;padding:10px 13px"><div style="font-size:22px;font-weight:800">✓ ${W.nums.correct}</div><div class="wrap-sub" style="margin-top:2px">نتيجة صحيحة</div></div>
+      <div class="wrap-tile" style="margin:0;padding:10px 13px"><div style="font-size:22px;font-weight:800">✗ ${W.nums.miss}</div><div class="wrap-sub" style="margin-top:2px">خطأ</div></div>
+    </div>
+    <div class="wrap-sub" style="margin-top:14px">دقّتك <strong class="wrap-gold">${W.nums.acc}%</strong></div>
+    <div class="wrap-mid" style="margin-top:6px">${tierLine}</div>`);
+  const sig=[];
+  if(W.fav) sig.push(`<div class="wrap-expl">النتيجة اللي كتبتها أكثر شي طول البطولة</div>
+    <div class="wrap-mid">توقعت <span class="wrap-gold" style="font-size:26px">${W.fav.score}</span> ${W.fav.count} مرة. الثبات على المبدأ... نحترمه 😌</div>`);
+  if(W.draw) sig.push(`<div class="wrap-tile"><div class="wrap-expl">كم مرة توقعت التعادل مقابل كم مرة صار فعلاً</div>
+    <div class="wrap-mid">${W.draw.type==='allergy'
+      ?`توقعت التعادل ${W.draw.pred} مرات بس، وهو صار ${W.draw.act} مرة. عندك حساسية من التعادل واضح 🤧`
+      :`${W.draw.pred} تعادل متوقع؟! محد فاز ومحد خسر... عيشة هادئة 😴`}</div></div>`);
+  if(W.opt) sig.push(`<div class="wrap-tile"><div class="wrap-expl">متوسط الأهداف في توقعاتك مقارنة بالمتوسط الحقيقي للبطولة</div>
+    <div class="wrap-mid">${W.opt.type==='d'
+      ?'توقعاتك كلها أهداف فوق أهداف. قلب حاط الهجوم قبل كل شي 🔥'
+      :W.opt.type==='e'
+      ?`الشباك عندك مقفلة بقفل وسلسلة 🔒 معدلك ${W.opt.mine} هدف بس`
+      :`معدلك ${W.opt.mine} والواقع ${W.opt.real}. قريب من الصورة — محلل مو مشجع 📊`}</div></div>`);
+  if(sig.length) S.push(`<div class="wrap-kicker">بصمتك</div>`+sig.join(''));
+  if(W.bold){
+    S.push(`<div class="wrap-kicker">ضربة معلم 🎯</div>
+      ${W.bold.fallback
+        ?`<div class="wrap-mid">المطابقة ما زارتك هالبطولة... بس أحلى نقاطك كانت في <span class="wrap-gold">${W.bold.label}</span>. البركة بالجايات 🙏</div>`
+        :`<div class="wrap-expl">أندر توقع مطابق جبته — الأقل توقعاً بين اللاعبين</div>
+          <div class="wrap-mid">${W.bold.label} — <span class="wrap-gold" style="font-size:24px">${W.bold.score}</span></div>
+          <div class="wrap-big" style="font-size:22px;margin-top:12px">${W.bold.others===0
+            ?`${W.players} لاعب بالقروب... وأنت <span class="wrap-gold">الوحيد</span> اللي شافها 🔮 عرّاف رسمي`
+            :`أنت و${W.bold.others} بس اللي توقعتوها. قدها وقدود 👏`}</div>`}`);
+  }
+  const hb=[];
+  if(W.heart) hb.push(`<div class="wrap-expl">المباراة اللي سجل فيها أغلب القروب نقاط... إلا أنت</div>
+    <div class="wrap-mid">${W.heart.label}: <span class="wrap-red">${W.heart.n} لاعب</span> جابوا نقاط هنا. أنت؟ ولا شي. صار خير 🙂</div>`);
+  if(W.champ){
+    const c=W.champ, f=flagFor(c.team)||'';
+    const line=c.type==='win'?`${f} ${c.team} — البطل! ‎+10 نقاط. فالك التوفيق يا ذيب 🐺🏆`
+      :c.type==='final'?`${f} ${c.team} وصل النهائي و... حسافة والله 💔 قريب من العشرة`
+      :c.type==='ko'?`${f} ${c.team} طاح في ${c.round}${c.pens?' — بركلات الترجيح، طبعاً 💀':''}`
+      :c.type==='groups'?`مرشحك ${f} ${c.team} ودّع من دور المجموعات. اختيار موفق 👍😅`
+      :`${f} ${c.team} — لسه بالسباق`;
+    hb.push(`<div class="wrap-tile"><div class="wrap-sub" style="margin:0 0 4px">مصير مرشحك للبطولة</div><div class="wrap-mid">${line}</div></div>`);
+  }
+  if(hb.length) S.push(`<div class="wrap-kicker">لحظة الانكسار 💔</div>`+hb.join(''));
+  if(W.twin) S.push(`<div class="wrap-kicker">التوأم 👯</div>
+    <div class="wrap-expl">اللاعب اللي تطابقت توقعاتكم بالضبط أكثر من أي ثنائي</div>
+    <div class="wrap-mid">توأمك التوقعي:</div>
+    <div class="wrap-big wrap-gold">${W.twin.name}</div>
+    <div class="wrap-mid" style="margin-top:10px">نفس التوقع بالضبط <span class="wrap-gold">${W.twin.count}</span> مرة.<br>أكيد ما فيه نسخ؟ نبغى تحقيق 🕵️</div>`);
+  if(W.quick.length) S.push(`<div class="wrap-kicker">جولة سريعة ⚡</div>`+
+    W.quick.map(x=>`<div class="wrap-tile">${x.expl?`<div class="wrap-expl">${x.expl}</div>`:''}<div class="wrap-mid">${x.line}</div></div>`).join(''));
+  if(W.duel) S.push(`<div class="wrap-kicker">المبارزة ⚔️</div>
+    <div class="wrap-expl">أقرب منافس لك بالنقاط — وسجل المواجهة بينكم يوم بيوم</div>
+    <div class="wrap-mid">غريمك هالموسم:</div>
+    <div class="wrap-big wrap-gold">${W.duel.name}</div>
+    <div class="wrap-mid" style="margin-top:12px">تقدمت عليه <span class="wrap-gold">${W.duel.led}</span> يوم من أصل ${W.duel.days}...</div>
+    <div class="wrap-mid">${W.duel.above?'...وبالأخير أنت فوق. وهذا اللي يفرق 😎':`...بس خط النهاية كان له، بفارق ${W.duel.margin}. العوض ولا القطيعة 💔`}</div>`);
+  S.push(`<div class="wrap-kicker">بطاقتك النهائية</div>
+    <div class="wrap-sub">${W.medalLine}</div>
+    <img id="wrap-card-img" alt="بطاقة الملخص">
+    <div style="display:flex;gap:10px;align-items:center">
+      <button class="wrap-btn" onclick="event.stopPropagation();shareWrapCard()">📤 شاركها في القروب</button>
+      <button class="wrap-btn ghost" onclick="event.stopPropagation();wrapShow(0)">↺ من البداية</button>
+    </div>`);
+  return S;
+}
+
+function openWrapped(){
+  if(!currentUser||!state.actual_champion) return;
+  const W=computeWrapped(currentUser.name);
+  const slides=buildWrappedSlides(W);
+  _wrapState={W,slides,cur:0,blob:null};
+  const ov=document.createElement('div');
+  ov.id='wrap-overlay';
+  ov.innerHTML=`<div class="wrap-dots">${slides.map((_,i)=>`<i${i===0?' class="on"':''}></i>`).join('')}</div>
+    <button class="wrap-close" onclick="event.stopPropagation();closeWrapped()">✕</button>
+    ${slides.map((s,i)=>`<div class="wrap-slide${i===0?' active':''}" data-i="${i}">${s}${i<slides.length-1?'<div class="wrap-tap">اضغط للمتابعة</div>':''}</div>`).join('')}`;
+  ov.addEventListener('click',()=>{ if(_wrapState.cur<slides.length-1) wrapShow(_wrapState.cur+1); });
+  document.body.appendChild(ov);
+  try{ localStorage.setItem('wc26_wrapped_seen_'+currentUser.name,'1'); }catch(e){}
+}
+function wrapShow(i){
+  _wrapState.cur=i;
+  document.querySelectorAll('#wrap-overlay .wrap-slide').forEach(s=>s.classList.toggle('active',+s.dataset.i===i));
+  document.querySelectorAll('#wrap-overlay .wrap-dots i').forEach((d,k)=>d.classList.toggle('on',k<=i));
+  if(i===_wrapState.slides.length-1) renderWrapCard();
+}
+function closeWrapped(){ const ov=document.getElementById('wrap-overlay'); if(ov) ov.remove(); }
+
+function wrapRoundRect(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+function wrapTile(ctx,x,y,w,h,label,value,note){
+  ctx.fillStyle='rgba(255,255,255,.09)'; wrapRoundRect(ctx,x,y,w,h,22); ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.16)'; ctx.lineWidth=2; wrapRoundRect(ctx,x,y,w,h,22); ctx.stroke();
+  ctx.textAlign='right'; ctx.direction='rtl';
+  ctx.fillStyle='#8FB3E8'; ctx.font='600 30px Segoe UI, Tahoma, Arial'; ctx.fillText(label,x+w-34,y+62);
+  ctx.fillStyle='#FFFFFF'; ctx.font='800 42px Segoe UI, Tahoma, Arial'; ctx.fillText(value,x+w-34,y+124,w-64);
+  if(note){ ctx.fillStyle='#5DE0A5'; ctx.font='600 27px Segoe UI, Tahoma, Arial'; ctx.fillText(note,x+w-34,y+170,w-64); }
+}
+function wrapCanvasBase(){
+  const cv=document.createElement('canvas'); cv.width=1080; cv.height=1920;
+  const ctx=cv.getContext('2d');
+  const bg=ctx.createLinearGradient(0,0,300,1920);
+  bg.addColorStop(0,'#041E42'); bg.addColorStop(.55,'#062A5C'); bg.addColorStop(1,'#0A3A8C');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,1080,1920);
+  let g=ctx.createRadialGradient(220,-100,50,220,-100,900);
+  g.addColorStop(0,'rgba(0,138,255,.4)'); g.addColorStop(1,'rgba(0,138,255,0)');
+  ctx.fillStyle=g; ctx.fillRect(0,0,1080,1000);
+  g=ctx.createRadialGradient(880,-100,50,880,-100,900);
+  g.addColorStop(0,'rgba(255,163,0,.28)'); g.addColorStop(1,'rgba(255,163,0,0)');
+  ctx.fillStyle=g; ctx.fillRect(0,0,1080,1000);
+  return {cv,ctx};
+}
+function renderWrapCard(){
+  const W=_wrapState.W;
+  const {cv,ctx}=wrapCanvasBase();
+  ctx.textAlign='center'; ctx.direction='rtl';
+  ctx.fillStyle='#8FB3E8'; ctx.font='700 34px Segoe UI, Tahoma, Arial';
+  ctx.fillText('S A B I C  S C  ·  W C 2 6  W R A P P E D',540,120);
+  ctx.fillStyle='rgba(255,255,255,.1)'; ctx.beginPath(); ctx.arc(540,320,110,0,7); ctx.fill();
+  ctx.fillStyle='#FFFFFF'; ctx.font='800 96px Segoe UI, Tahoma, Arial';
+  ctx.fillText(W.name.charAt(0),540,355);
+  ctx.font='800 72px Segoe UI, Tahoma, Arial'; ctx.fillText(W.name,540,540);
+  ctx.fillStyle='#8FB3E8'; ctx.font='600 36px Segoe UI, Tahoma, Arial';
+  ctx.fillText('كأس العالم 2026 · '+W.nums.scored+' توقع',540,600);
+  ctx.fillStyle='#FFA300'; ctx.font='800 190px Segoe UI, Tahoma, Arial';
+  ctx.fillText('#'+W.rank,540,830);
+  ctx.fillStyle='#FFFFFF'; ctx.font='800 76px Segoe UI, Tahoma, Arial';
+  ctx.fillText(W.pts+' نقطة',540,940);
+  ctx.fillStyle='#8FB3E8'; ctx.font='600 40px Segoe UI, Tahoma, Arial';
+  ctx.fillText(W.marginLine,540,1010);
+  const pad=70,gap=30,tw=(1080-pad*2-gap)/2,th=210;
+  const exNote = W.nums.exactBetter>=W.players-1 ? 'الأول في القروب' : ('أعلى من '+W.nums.exactBetter+' لاعبين');
+  wrapTile(ctx,pad,1100,tw,th,'نتائج مطابقة','🎯 '+W.nums.exact,exNote);
+  wrapTile(ctx,pad+tw+gap,1100,tw,th,'أفضل جولة',W.bestRound,'');
+  wrapTile(ctx,pad,1100+th+gap,tw,th,'ضربة معلم',W.bold&&!W.bold.fallback?W.bold.score:'—',W.bold&&!W.bold.fallback&&W.bold.others===0?'أنت الوحيد':'');
+  const cFate=W.champ?(W.champ.type==='win'?'البطل 🏆':W.champ.type==='groups'?'خرج — المجموعات':W.champ.type==='ko'?('خرج — '+W.champ.round):W.champ.type==='final'?'خسر النهائي':''):'';
+  wrapTile(ctx,pad+tw+gap,1100+th+gap,tw,th,'مرشح البطولة',W.champ?W.champ.team:'—',cFate);
+  ctx.textAlign='center';
+  ctx.fillStyle='#8FB3E8'; ctx.font='600 34px Segoe UI, Tahoma, Arial';
+  ctx.fillText(W.medalLine,540,1680);
+  ctx.fillStyle='#5E77A3'; ctx.font='700 30px Segoe UI, Tahoma, Arial';
+  ctx.fillText('S A B I C  S C  P R E D I C T I O N S  ·  2 0 2 6',540,1840);
+  const img=document.getElementById('wrap-card-img');
+  if(img) img.src=cv.toDataURL('image/png');
+  cv.toBlob(b=>{_wrapState.blob=b;},'image/png');
+}
+async function shareWrapCard(){
+  if(!_wrapState.blob){ renderWrapCard(); await new Promise(r=>setTimeout(r,400)); }
+  const file=new File([_wrapState.blob],'wc26_wrapped.png',{type:'image/png'});
+  if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file],title:'WC26 Wrapped'}); return; }catch(e){}
+  }
+  const a=document.createElement('a');
+  a.href=document.getElementById('wrap-card-img').src; a.download='wc26_wrapped.png'; a.click();
+}
+
+// ===== Group Wrapped card (admin) =====
+function shareGroupWrapCard(){
+  const players=wrapValidPlayers();
+  const mids=wrapScoredMids();
+  const P=state.predictions;
+  // twins pair
+  let pair=null;
+  for(let i=0;i<players.length;i++) for(let j=i+1;j<players.length;j++){
+    let m=0;
+    mids.forEach(mid=>{ const a=(P[players[i]]||{})[mid], b=(P[players[j]]||{})[mid];
+      if(a&&b&&a.h!==undefined&&b.h!==undefined&&+a.h===+b.h&&+a.a===+b.a) m++; });
+    if(!pair||m>pair.m) pair={a:players[i],b:players[j],m};
+  }
+  // biggest collapse + ghost match + favorites via per-player wrapped pieces
+  let collapse=null;
+  players.forEach(n=>{ const w=computeWrapped(n);
+    if(w.journey){ const drop=w.rank-w.journey.best.rank; if(drop>0&&(!collapse||drop>collapse.drop)) collapse={name:n,from:w.journey.best.rank,to:w.rank,drop}; } });
+  let ghost=null;
+  mids.forEach(mid=>{ let n=0;
+    players.forEach(p=>{ const pr=(P[p]||{})[mid]; if(!pr||pr.h===undefined) return;
+      const s=scoreOneMatch(mid,pr,state.results[mid]); if(s&&s.points>0) n++; });
+    if(!ghost||n<ghost.n) ghost={mid,n}; });
+  const favTeam={}, favLine={};
+  players.forEach(p=>Object.entries(P[p]||{}).forEach(([mid,pr])=>{
+    if(!pr||pr.h===undefined||pr.h==='') return;
+    favLine[pr.h+'–'+pr.a]=(favLine[pr.h+'–'+pr.a]||0)+1;
+    const tm=matchTeamsFor(mid)||[];
+    if(+pr.h>+pr.a&&tm[0]) favTeam[tm[0]]=(favTeam[tm[0]]||0)+1;
+    if(+pr.a>+pr.h&&tm[1]) favTeam[tm[1]]=(favTeam[tm[1]]||0)+1;
+  }));
+  const ft=Object.entries(favTeam).sort((a,b)=>b[1]-a[1])[0];
+  const fl=Object.entries(favLine).sort((a,b)=>b[1]-a[1])[0];
+  const {cv,ctx}=wrapCanvasBase();
+  ctx.textAlign='center'; ctx.direction='rtl';
+  ctx.fillStyle='#8FB3E8'; ctx.font='700 34px Segoe UI, Tahoma, Arial';
+  ctx.fillText('S A B I C  S C  ·  W C 2 6  W R A P P E D',540,120);
+  ctx.fillStyle='#FFFFFF'; ctx.font='800 84px Segoe UI, Tahoma, Arial';
+  ctx.fillText('ملخص القروب 🏆',540,260);
+  const lines=[];
+  if(pair) lines.push(['توأما البطولة','\u200F'+pair.a+' و'+pair.b+' — تطابقوا '+pair.m+' مرة. واحد منهم ينسخ، بس منعرف منهو 🕵️']);
+  if(collapse) lines.push(['أكبر انهيار','\u200F'+collapse.name+' — من المركز '+collapse.from+' إلى '+collapse.to+'. رحلة عكسية 📉 سلامتك']);
+  if(ghost) lines.push(['المباراة الشبح','\u200F'+matchLabelFor(ghost.mid)+(ghost.n===0?': محد بالقروب جابها. ولا واحد. مباراة ضد العلم 👻':': '+ghost.n+' بس جابوها')]);
+  if(ft) lines.push(['فريق القروب','\u200F'+ft[0]+' — توقعتوا فوزهم '+ft[1]+' مرة كقروب. الوفاء موجود، النتائج... حسب الحال']);
+  if(fl) lines.push(['نتيجة القروب المفضلة','\u200F'+fl[0]+' — '+fl[1]+' توقع. فيه علاج جماعي؟ 💊']);
+  let y=420;
+  lines.forEach(([label,text])=>{
+    ctx.fillStyle='rgba(255,255,255,.09)'; wrapRoundRect(ctx,70,y,940,230,22); ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.16)'; ctx.lineWidth=2; wrapRoundRect(ctx,70,y,940,230,22); ctx.stroke();
+    ctx.textAlign='right';
+    ctx.fillStyle='#FFA300'; ctx.font='800 38px Segoe UI, Tahoma, Arial';
+    ctx.fillText(label,976,y+70);
+    ctx.fillStyle='#FFFFFF'; ctx.font='600 34px Segoe UI, Tahoma, Arial';
+    // naive two-line wrap
+    const words=text.split(' '); let l1='',l2='';
+    words.forEach(w=>{ if(ctx.measureText(l1+' '+w).width<880&&!l2) l1=(l1+' '+w).trim(); else l2=(l2+' '+w).trim(); });
+    ctx.fillText(l1,976,y+132,880);
+    if(l2) ctx.fillText(l2,976,y+184,880);
+    y+=260;
+  });
+  ctx.textAlign='center';
+  ctx.fillStyle='#5E77A3'; ctx.font='700 30px Segoe UI, Tahoma, Arial';
+  ctx.fillText('S A B I C  S C  P R E D I C T I O N S  ·  2 0 2 6',540,1840);
+  cv.toBlob(async b=>{
+    const file=new File([b],'wc26_group_wrapped.png',{type:'image/png'});
+    if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
+      try{ await navigator.share({files:[file],title:'WC26 Group Wrapped'}); return; }catch(e){}
+    }
+    const a=document.createElement('a'); a.href=cv.toDataURL('image/png'); a.download='wc26_group_wrapped.png'; a.click();
+  },'image/png');
 }
 
 function updateHeroCountdown(){
@@ -2703,7 +3227,13 @@ function renderLeaderboard(){
       return `<div class="podium-card p${idx+1}"><div class="medal">${medals[idx]}</div><div class="pname">${n}</div><div class="ppts">${p} ${t('pts')}</div></div>`;
     }).join('') + `</div>`;
   }
-  container.innerHTML=podiumHtml+sorted.map(([name,pts],i)=>{
+  // WC26 Wrapped unlock banner (appears only after actual_champion is set)
+  let wrapBanner='';
+  if(state.actual_champion && currentUser && lbPrefix==='mainlb'){
+    wrapBanner = `<div class="wrap-banner" onclick="openWrapped()">🏆 ملخصك للبطولة جاهز — WC26 Wrapped<small>اضغط هنا لعرض رحلتك</small></div>`
+      + (currentUser.isAdmin ? `<div style="text-align:center;margin-bottom:12px"><button class="btn btn-sm" style="width:auto;padding:6px 16px" onclick="shareGroupWrapCard()">🖼️ بطاقة ملخص القروب</button></div>` : '');
+  }
+  container.innerHTML=wrapBanner+podiumHtml+sorted.map(([name,pts],i)=>{
     const cPick = state.champion_picks[name];
     const isSelf = currentUser && name===currentUser.name;
     const champDead = cPick && (state.actual_champion ? state.actual_champion!==cPick : isTeamEliminated(cPick));
