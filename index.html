@@ -1860,7 +1860,7 @@ function checkResultReveals(){
   try { localStorage.setItem(seenKeyFor(currentUser.name), JSON.stringify(allMids)); } catch(e){}
   if(!unseen.length) return;
   // Chronological order, capped at the 5 most recent to avoid backlog spam
-  unseen.sort((x,y)=>(new Date(MATCH_SCHEDULE[x]||0))-(new Date(MATCH_SCHEDULE[y]||0)));
+  unseen.sort((x,y)=>(new Date(wrapKickoffIso(x)||0))-(new Date(wrapKickoffIso(y)||0)));
   showRevealQueue(unseen.slice(-5), 0);
 }
 
@@ -1934,11 +1934,19 @@ const AR_MONTHS=['يناير','فبراير','مارس','أبريل','مايو',
 function wrapDayKey(iso){ return new Date(new Date(iso).getTime()+3*3600000).toISOString().slice(0,10); }
 function wrapDayLabel(key){ const p=key.split('-'); return parseInt(p[2])+' '+AR_MONTHS[parseInt(p[1])-1]; }
 function wrapValidPlayers(){ return Object.values(state.players).filter(p=>p.name!=='Admin').map(p=>p.name); }
-function wrapScoredMids(){ return Object.keys(state.results).filter(m=>m!=='CHAMPION_LOCKED' && MATCH_SCHEDULE[m]); }
+function wrapKickoffIso(mid){
+  // KO mids are schedule keys directly; group mids (GA_0_1) map via team pair
+  if(MATCH_SCHEDULE[mid]) return MATCH_SCHEDULE[mid];
+  const tm = matchTeamsFor(mid);
+  if(!tm) return null;
+  const key = getScheduleKeyForMatch(mid, tm[0], tm[1]);
+  return key ? (MATCH_SCHEDULE[key]||null) : null;
+}
+function wrapScoredMids(){ return Object.keys(state.results).filter(m=>m!=='CHAMPION_LOCKED' && wrapKickoffIso(m)); }
 
 function computeWrapped(pname){
   const players = wrapValidPlayers();
-  const mids = wrapScoredMids().sort((a,b)=>new Date(MATCH_SCHEDULE[a])-new Date(MATCH_SCHEDULE[b]));
+  const mids = wrapScoredMids().sort((a,b)=>new Date(wrapKickoffIso(a))-new Date(wrapKickoffIso(b)));
   const P = state.predictions;
   const my = P[pname]||{};
   const W = {name:pname, players:players.length};
@@ -1985,7 +1993,7 @@ function computeWrapped(pname){
 
   // ---- rank journey (day-by-day replay) ----
   const days=[]; const byDay={};
-  mids.forEach(mid=>{ const k=wrapDayKey(MATCH_SCHEDULE[mid]); if(!byDay[k]){byDay[k]=[];days.push(k);} byDay[k].push(mid); });
+  mids.forEach(mid=>{ const k=wrapDayKey(wrapKickoffIso(mid)); if(!byDay[k]){byDay[k]=[];days.push(k);} byDay[k].push(mid); });
   const cum={}, cumEx={};
   players.forEach(n=>{cum[n]=0;cumEx[n]=0;});
   const myRanks=[]; const rivalSeries={};
@@ -2183,7 +2191,7 @@ const RACE_COLORS=['#2a78d6','#1baf7a','#eda100','#7F77DD','#D85A30','#D4537E','
 
 function computeRaceSeries(){
   const players=wrapValidPlayers();
-  const mids=wrapScoredMids().sort((a,b)=>new Date(MATCH_SCHEDULE[a])-new Date(MATCH_SCHEDULE[b]));
+  const mids=wrapScoredMids().sort((a,b)=>new Date(wrapKickoffIso(a))-new Date(wrapKickoffIso(b)));
   const cum={}; players.forEach(n=>cum[n]=0);
   const series={}; players.forEach(n=>series[n]=[0]);
   const stageBounds=[];
