@@ -451,6 +451,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
 
       <div class="admin-block">
+        <h3>🏁 إعادة السباق — تجريبي (Race replay)</h3>
+        <p style="font-size:12px;color:#939598;margin-bottom:10px">Admin preview only — players cannot see this. Match-by-match rank race, slows down as the tournament progresses. Screen-record this to share.</p>
+        <div id="race-replay-status" style="font-size:12px;color:#0047BB;font-weight:700;margin-bottom:6px;min-height:16px"></div>
+        <div id="race-replay-bars" style="position:relative;margin-bottom:10px"></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <button class="btn btn-sm" id="race-replay-play" style="width:auto;padding:6px 16px" onclick="toggleRaceReplay()">▶️ تشغيل</button>
+          <button class="btn btn-sm" style="width:auto;padding:6px 16px;border-color:#939598;color:#939598" onclick="resetRaceReplay()">↺ إعادة</button>
+          <span id="race-replay-counter" style="font-size:11px;color:#939598;margin-inline-start:auto"></span>
+        </div>
+        <input type="range" id="race-replay-scrub" min="0" max="0" value="0" style="width:100%" oninput="scrubRaceReplay(this.value)">
+      </div>
+
+      <div class="admin-block">
         <h3>📈 Points race — beta (سباق النقاط)</h3>
         <p style="font-size:12px;color:#939598;margin-bottom:10px">Admin preview only — players cannot see this. Cumulative points per player over matches played. Tap a name to toggle their line.</p>
         <div id="race-legend" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
@@ -2005,10 +2018,12 @@ function computeWrapped(pname){
     players.forEach(n=>rivalSeries[n].push(cum[n]));
   });
   if(myRanks.length){
-    let best=myRanks[0], worst=myRanks[0], glory=null;
+    // Best/worst rank ignore the first 4 matchdays (early standings are noise
+    // when few players have scored); the journey line itself still draws fully.
+    const eligible = myRanks.length>5 ? myRanks.slice(4) : myRanks;
+    let best=eligible[0], worst=eligible[0], glory=null;
+    eligible.forEach(r=>{ if(r.rank<best.rank) best=r; if(r.rank>worst.rank) worst=r; });
     myRanks.forEach((r,i)=>{
-      if(r.rank<best.rank) best=r;
-      if(r.rank>worst.rank) worst=r;
       if(i>0){ const jump=myRanks[i-1].rank-r.rank; if(jump>0 && (!glory||jump>glory.jump)) glory={day:r.day,jump}; }
     });
     W.journey={best:{rank:best.rank,day:wrapDayLabel(best.day)}, worst:{rank:worst.rank,day:wrapDayLabel(worst.day)}, glory:glory?{day:wrapDayLabel(glory.day),jump:glory.jump}:null, series:myRanks.map(r=>r.rank)};
@@ -2185,6 +2200,155 @@ function computeWrapped(pname){
   return W;
 }
 
+// ===== Race replay (admin preview): match-by-match bar race, decelerating pacing =====
+const RACE_STAGE_DURATION = { groups:90, R32:220, R16:350, QF:550, SF:900, TP:900, F:1800 };
+const RACE_STAGE_LABEL_AR = { groups:'دور المجموعات', R32:'دور الـ32', R16:'دور الـ16', QF:'ربع النهائي', SF:'نصف النهائي', TP:'المركز الثالث', F:'النهائي' };
+
+function computeRaceFrames(){
+  const players = wrapValidPlayers();
+  const mids = wrapScoredMids().sort((a,b)=>new Date(wrapKickoffIso(a))-new Date(wrapKickoffIso(b)));
+  const cum={}; players.forEach(n=>cum[n]=0);
+  const frames=[];
+  let lastStage=null;
+  mids.forEach(mid=>{
+    players.forEach(n=>{
+      const pr=(state.predictions[n]||{})[mid];
+      if(pr&&pr.h!==undefined&&pr.h!==''){
+        const s=scoreOneMatch(mid,pr,state.results[mid]);
+        if(s) cum[n]+=s.points;
+      }
+    });
+    const st=myResultsStageFor(mid);
+    const stageKey = st.key==='groups' ? 'groups' : mid.split('_')[1]; // R32/R16/QF/SF/TP/F
+    const isNewStage = stageKey!==lastStage;
+    lastStage=stageKey;
+    frames.push({
+      mid, label: matchLabelFor(mid), stageKey,
+      stageLabel: RACE_STAGE_LABEL_AR[stageKey]||stageKey,
+      duration: RACE_STAGE_DURATION[stageKey]||300,
+      isNewStage, isFinal: mid==='KO_F_1',
+      values: Object.assign({}, cum)
+    });
+  });
+  return { players, frames };
+}
+
+let _raceReplay = null; // {players, frames, idx, playing, timer}
+function ensureRaceReplayLoaded(){
+  if(_raceReplay) return;
+  const {players, frames} = computeRaceFrames();
+  _raceReplay = { players, frames, idx: -1, playing:false, timer:null };
+  const scrub=document.getElementById('race-replay-scrub');
+  if(scrub) scrub.max = String(Math.max(frames.length-1,0));
+}
+
+function renderRaceReplay(){
+  const barsEl=document.getElementById('race-replay-bars');
+  if(!barsEl) return; // not on this tab
+  ensureRaceReplayLoaded();
+  drawRaceFrame(0);
+}
+
+function raceColorOf(name, players){
+  const i = players.indexOf(name);
+  return RACE_COLORS[i>=0?i%RACE_COLORS.length:0];
+}
+
+function drawRaceFrame(i){
+  const R=_raceReplay;
+  if(!R || !R.frames.length) return;
+  i = Math.max(0, Math.min(i, R.frames.length-1));
+  R.idx = i;
+  const frame = R.frames[i];
+  const barsEl=document.getElementById('race-replay-bars');
+  const statusEl=document.getElementById('race-replay-status');
+  const counterEl=document.getElementById('race-replay-counter');
+  const scrub=document.getElementById('race-replay-scrub');
+  if(scrub && String(scrub.value)!==String(i)) scrub.value = i;
+  if(counterEl) counterEl.textContent = (i+1)+' / '+R.frames.length;
+
+  const rowH=30, maxVal=Math.max(...Object.values(frame.values),1);
+  const order = R.players.slice().sort((a,b)=>frame.values[b]-frame.values[a]||a.localeCompare(b));
+
+  if(!barsEl.dataset.built){
+    barsEl.style.height = (rowH*R.players.length)+'px';
+    barsEl.innerHTML = R.players.map(n=>{
+      const c = raceColorOf(n, order);
+      return `<div id="rr-row-${cssId(n)}" style="position:absolute;left:0;right:0;height:${rowH-4}px;top:0;transition:top .22s linear;display:flex;align-items:center;gap:6px;font-size:11px">
+        <span style="width:16px;text-align:right;color:#939598;font-weight:700" id="rr-rank-${cssId(n)}"></span>
+        <span style="width:78px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:#041E42">${n}</span>
+        <span style="flex:1;position:relative;height:14px">
+          <span id="rr-bar-${cssId(n)}" style="position:absolute;inset-inline-start:0;top:0;height:100%;border-radius:3px;background:${c};transition:width .22s linear;width:0%"></span>
+        </span>
+        <span id="rr-val-${cssId(n)}" style="width:34px;text-align:end;font-weight:700;color:#041E42">0</span>
+      </div>`;
+    }).join('');
+    barsEl.dataset.built='1';
+  }
+  order.forEach((n,rank)=>{
+    const row=document.getElementById('rr-row-'+cssId(n));
+    const bar=document.getElementById('rr-bar-'+cssId(n));
+    const val=document.getElementById('rr-val-'+cssId(n));
+    const rk=document.getElementById('rr-rank-'+cssId(n));
+    if(row) row.style.top = (rank*rowH)+'px';
+    if(bar) bar.style.width = Math.max(2,(frame.values[n]/maxVal*100))+'%';
+    if(val) val.textContent = frame.values[n];
+    if(rk) rk.textContent = (rank+1);
+  });
+  if(statusEl){
+    statusEl.textContent = (frame.isNewStage? '🏁 '+frame.stageLabel+' — ' : '') + frame.label
+      + (frame.isFinal? ' 🏆' : '');
+  }
+}
+
+function cssId(name){ return name.replace(/[^a-zA-Z0-9]/g,'_'); }
+
+function stepRaceReplay(){
+  const R=_raceReplay;
+  if(!R || !R.playing) return;
+  if(R.idx >= R.frames.length-1){
+    R.playing=false;
+    const btn=document.getElementById('race-replay-play'); if(btn) btn.textContent='▶️ تشغيل';
+    return;
+  }
+  drawRaceFrame(R.idx+1);
+  const dur = R.frames[R.idx].duration;
+  const extraHold = R.frames[R.idx].isFinal ? 2500 : 0;
+  R.timer = setTimeout(stepRaceReplay, dur + extraHold);
+}
+
+function toggleRaceReplay(){
+  ensureRaceReplayLoaded();
+  const R=_raceReplay;
+  const btn=document.getElementById('race-replay-play');
+  if(R.playing){
+    R.playing=false;
+    if(R.timer) clearTimeout(R.timer);
+    if(btn) btn.textContent='▶️ تشغيل';
+  } else {
+    if(R.idx>=R.frames.length-1) R.idx=-1; // restart if at end
+    R.playing=true;
+    if(btn) btn.textContent='⏸ إيقاف';
+    stepRaceReplay();
+  }
+}
+
+function resetRaceReplay(){
+  const R=_raceReplay;
+  if(!R) return;
+  R.playing=false;
+  if(R.timer) clearTimeout(R.timer);
+  const btn=document.getElementById('race-replay-play'); if(btn) btn.textContent='▶️ تشغيل';
+  drawRaceFrame(0);
+}
+
+function scrubRaceReplay(v){
+  const R=_raceReplay;
+  if(!R) return;
+  if(R.playing){ R.playing=false; if(R.timer) clearTimeout(R.timer); const btn=document.getElementById('race-replay-play'); if(btn) btn.textContent='▶️ تشغيل'; }
+  drawRaceFrame(parseInt(v,10));
+}
+
 // ===== Points race chart (admin preview) =====
 let _raceSelected=null;
 const RACE_COLORS=['#2a78d6','#1baf7a','#eda100','#7F77DD','#D85A30','#D4537E','#185FA5','#639922','#993C1D','#534AB7','#0F6E56','#BA7517','#993556','#444441'];
@@ -2347,7 +2511,9 @@ function buildWrappedSlides(W){
     <div class="wrap-mid">غريمك هالموسم:</div>
     <div class="wrap-big wrap-gold">${W.duel.name}</div>
     <div class="wrap-mid" style="margin-top:12px">تقدمت عليه <span class="wrap-gold">${W.duel.led}</span> يوم من أصل ${W.duel.days}...</div>
-    <div class="wrap-mid">${W.duel.above?'...وبالأخير أنت فوق. وهذا اللي يفرق 😎':`...بس خط النهاية كان له، بفارق ${W.duel.margin}. العوض ولا القطيعة 💔`}</div>`);
+    <div class="wrap-mid">${W.duel.margin===0
+      ? (W.duel.above?'...تعادلتوا بالنقاط بالضبط، والفرق حسمته التفاصيل — وأنت اللي طلعت فوق 😎':'...تعادلتوا بالنقاط بالضبط... والفرق حسمته التفاصيل 😤')
+      : (W.duel.above?'...وبالأخير أنت فوق. وهذا اللي يفرق 😎':`...بس خط النهاية كان له، بفارق ${W.duel.margin}. العوض ولا القطيعة 💔`)}</div>`);
   S.push(`<div class="wrap-kicker">بطاقتك النهائية</div>
     <div class="wrap-sub">${W.medalLine}</div>
     <img id="wrap-card-img" alt="بطاقة الملخص">
@@ -2460,15 +2626,12 @@ function shareGroupWrapCard(){
       if(a&&b&&a.h!==undefined&&b.h!==undefined&&+a.h===+b.h&&+a.a===+b.a) m++; });
     if(!pair||m>pair.m) pair={a:players[i],b:players[j],m};
   }
-  // biggest collapse + ghost match + favorites via per-player wrapped pieces
-  let collapse=null;
-  players.forEach(n=>{ const w=computeWrapped(n);
-    if(w.journey){ const drop=w.rank-w.journey.best.rank; if(drop>0&&(!collapse||drop>collapse.drop)) collapse={name:n,from:w.journey.best.rank,to:w.rank,drop}; } });
+  // Ghost match: fewest scorers; ties broken by MOST failed predictions (better story)
   let ghost=null;
-  mids.forEach(mid=>{ let n=0;
-    players.forEach(p=>{ const pr=(P[p]||{})[mid]; if(!pr||pr.h===undefined) return;
+  mids.forEach(mid=>{ let n=0,tot=0;
+    players.forEach(p=>{ const pr=(P[p]||{})[mid]; if(!pr||pr.h===undefined) return; tot++;
       const s=scoreOneMatch(mid,pr,state.results[mid]); if(s&&s.points>0) n++; });
-    if(!ghost||n<ghost.n) ghost={mid,n}; });
+    if(tot>0 && (!ghost||n<ghost.n||(n===ghost.n&&tot>ghost.tot))) ghost={mid,n,tot}; });
   const favTeam={}, favLine={};
   players.forEach(p=>Object.entries(P[p]||{}).forEach(([mid,pr])=>{
     if(!pr||pr.h===undefined||pr.h==='') return;
@@ -2487,7 +2650,6 @@ function shareGroupWrapCard(){
   ctx.fillText('ملخص القروب 🏆',540,260);
   const lines=[];
   if(pair) lines.push(['توأما البطولة','\u200F'+pair.a+' و'+pair.b+' — تطابقوا '+pair.m+' مرة. واحد منهم ينسخ، بس منعرف منهو 🕵️']);
-  if(collapse) lines.push(['أكبر انهيار','\u200F'+collapse.name+' — من المركز '+collapse.from+' إلى '+collapse.to+'. رحلة عكسية 📉 سلامتك']);
   if(ghost) lines.push(['المباراة الشبح','\u200F'+matchLabelFor(ghost.mid)+(ghost.n===0?': محد بالقروب جابها. ولا واحد. مباراة ضد العلم 👻':': '+ghost.n+' بس جابوها')]);
   if(ft) lines.push(['فريق القروب','\u200F'+ft[0]+' — توقعتوا فوزهم '+ft[1]+' مرة كقروب. الوفاء موجود، النتائج... حسب الحال']);
   if(fl) lines.push(['نتيجة القروب المفضلة','\u200F'+fl[0]+' — '+fl[1]+' توقع. فيه علاج جماعي؟ 💊']);
@@ -3492,6 +3654,7 @@ function renderAdmin(){
   if(!currentUser.isAdmin) return;
   renderAwaitingResults();
   renderPointsRace();
+  renderRaceReplay();
 
   const tbody=document.getElementById('players-tbody');
   const players=Object.values(state.players);
