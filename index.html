@@ -457,6 +457,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div id="race-replay-bars" style="position:relative;margin-bottom:10px"></div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
           <button class="btn btn-sm" id="race-replay-play" style="width:auto;padding:6px 16px" onclick="toggleRaceReplay()">▶️ تشغيل</button>
+          <button class="btn btn-sm" id="race-replay-download" style="width:auto;padding:6px 16px;border-color:#0047BB;color:#0047BB" onclick="downloadRaceVideo()">⬇️ تحميل فيديو</button>
           <button class="btn btn-sm" style="width:auto;padding:6px 16px;border-color:#939598;color:#939598" onclick="resetRaceReplay()">↺ إعادة</button>
           <span id="race-replay-counter" style="font-size:11px;color:#939598;margin-inline-start:auto"></span>
         </div>
@@ -2151,9 +2152,9 @@ function computeWrapped(pname){
   mids.forEach(mid=>{ const pr=my[mid],res=state.results[mid],s=sc[mid][pname];
     if(!pr||pr.h===undefined||pr.h===''||!s||s.points>0) return;
     const err=Math.abs((+pr.h+ +pr.a)-(res.h+res.a));
-    if(err>=4&&(!chaos||err>chaos.err)) chaos={err,pred:pr.h+'–'+pr.a,real:res.h+'–'+res.a};
+    if(err>=4&&(!chaos||err>chaos.err)) chaos={err,pred:pr.h+'–'+pr.a,real:res.h+'–'+res.a,label:matchLabelFor(mid)};
   });
-  if(chaos) q.push({score:chaos.err*2, line:'توقعت '+chaos.pred+'... وطلعت '+chaos.real+'. وش كنت شارب؟ 😂', expl:null});
+  if(chaos) q.push({score:chaos.err*2, line:'توقعت '+chaos.pred+' في '+chaos.label+'... وطلعت '+chaos.real+'. وش كنت شارب؟ 😂', expl:null});
   days.forEach(k=>{
     const played=byDay[k].filter(m=>sc[m][pname]);
     if(played.length>=3 && played.every(m=>sc[m][pname].points>0))
@@ -2201,7 +2202,7 @@ function computeWrapped(pname){
 }
 
 // ===== Race replay (admin preview): match-by-match bar race, decelerating pacing =====
-const RACE_STAGE_DURATION = { groups:300, R32:650, R16:1000, QF:1500, SF:2400, TP:2400, F:3500 };
+const RACE_STAGE_DURATION = { groups:1000, R32:1000, R16:1000, QF:1000, SF:1000, TP:1000, F:1000 };
 const RACE_STAGE_LABEL_AR = { groups:'دور المجموعات', R32:'دور الـ32', R16:'دور الـ16', QF:'ربع النهائي', SF:'نصف النهائي', TP:'المركز الثالث', F:'النهائي' };
 
 function computeRaceFrames(){
@@ -2254,6 +2255,13 @@ function raceColorOf(name, players){
   return RACE_COLORS[i>=0?i%RACE_COLORS.length:0];
 }
 
+function ensureRaceColors(R){
+  if(R.colorOf) return;
+  const finalVals = R.frames[R.frames.length-1].values;
+  const finalOrder = R.players.slice().sort((a,b)=>finalVals[b]-finalVals[a]||a.localeCompare(b));
+  R.colorOf = {}; finalOrder.forEach((n,idx)=>{ R.colorOf[n]=RACE_COLORS[idx%RACE_COLORS.length]; });
+}
+
 const RACE_TOP_N = 10;
 
 function drawRaceFrame(i){
@@ -2273,11 +2281,7 @@ function drawRaceFrame(i){
   const order = R.players.slice().sort((a,b)=>frame.values[b]-frame.values[a]||a.localeCompare(b));
   const topSet = new Set(order.slice(0,RACE_TOP_N));
   // Stable coloring keyed to FINAL standing so a player's bar color never changes mid-race
-  if(!R.colorOf){
-    const finalVals = R.frames[R.frames.length-1].values;
-    const finalOrder = R.players.slice().sort((a,b)=>finalVals[b]-finalVals[a]||a.localeCompare(b));
-    R.colorOf = {}; finalOrder.forEach((n,idx)=>{ R.colorOf[n]=RACE_COLORS[idx%RACE_COLORS.length]; });
-  }
+  ensureRaceColors(R);
 
   if(!barsEl.dataset.built){
     barsEl.style.height = (rowH*RACE_TOP_N)+'px';
@@ -2328,7 +2332,7 @@ function stepRaceReplay(){
   }
   drawRaceFrame(R.idx+1);
   const dur = R.frames[R.idx].duration;
-  const extraHold = R.frames[R.idx].isFinal ? 4000 : 0;
+  const extraHold = R.frames[R.idx].isFinal ? 3000 : 0;
   R.timer = setTimeout(stepRaceReplay, dur + extraHold);
 }
 
@@ -2362,6 +2366,147 @@ function scrubRaceReplay(v){
   if(!R) return;
   if(R.playing){ R.playing=false; if(R.timer) clearTimeout(R.timer); const btn=document.getElementById('race-replay-play'); if(btn) btn.textContent='▶️ تشغيل'; }
   drawRaceFrame(parseInt(v,10));
+}
+
+// ===== Race replay: video export (canvas render + MediaRecorder) =====
+function raceRowLayout(n){
+  const W=900, rowH=48, top0=110;
+  return {W, H: top0 + n*rowH + 40, rowH, top0};
+}
+function drawRaceCanvasFrame(ctx, layout, R, order, values, prevTop, statusText){
+  const {W,H,rowH,top0} = layout;
+  ctx.fillStyle='#FFFFFF'; ctx.fillRect(0,0,W,H);
+  ctx.textAlign='right'; ctx.direction='rtl';
+  ctx.fillStyle='#041E42'; ctx.font='700 26px Segoe UI, Tahoma, Arial';
+  ctx.fillText('SABIC SC · WC26 — سباق النقاط', W-30, 45);
+  ctx.fillStyle='#0047BB'; ctx.font='600 18px Segoe UI, Tahoma, Arial';
+  ctx.fillText(statusText||'', W-30, 78);
+  const maxVal = Math.max(...Object.values(values),1);
+  const barX0=170, barMaxW=W-barX0-110;
+  order.forEach(entry=>{
+    const {name, top, opacity, value} = entry;
+    if(opacity<=0.02) return;
+    const y = top0 + top*rowH;
+    ctx.globalAlpha = opacity;
+    ctx.fillStyle='#041E42'; ctx.font='700 18px Segoe UI, Tahoma, Arial';
+    ctx.textAlign='right';
+    ctx.fillText(name, W-30, y+rowH*0.62, 130);
+    const w = Math.max(4, value/maxVal*barMaxW);
+    ctx.fillStyle=R.colorOf[name];
+    wrapRoundRect(ctx, barX0, y+8, w, rowH-20, 6); ctx.fill();
+    ctx.fillStyle='#041E42'; ctx.font='700 18px Segoe UI, Tahoma, Arial';
+    ctx.textAlign='left';
+    ctx.fillText(String(Math.round(value)), barX0+w+10, y+rowH*0.62);
+    ctx.globalAlpha=1;
+  });
+  ctx.textAlign='right';
+}
+function raceFrameEntries(R, frame, prevFrame, t){
+  // t in [0,1]: interpolation position between prevFrame and frame
+  const order = R.players.slice().sort((a,b)=>frame.values[b]-frame.values[a]||a.localeCompare(b));
+  const topSet = new Set(order.slice(0,RACE_TOP_N));
+  const prevOrder = prevFrame ? R.players.slice().sort((a,b)=>prevFrame.values[b]-prevFrame.values[a]||a.localeCompare(b)) : order;
+  const prevTopSet = new Set(prevOrder.slice(0,RACE_TOP_N));
+  const ease = t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2; // easeInOutQuad
+  return R.players.map(name=>{
+    const rank = order.indexOf(name);
+    const prevRank = prevOrder.indexOf(name);
+    const inNow = topSet.has(name), inPrev = prevTopSet.has(name);
+    const topNow = inNow ? rank : RACE_TOP_N;
+    const topPrev = inPrev ? prevRank : RACE_TOP_N;
+    const top = topPrev + (topNow-topPrev)*ease;
+    const opNow = inNow?1:0, opPrev = inPrev?1:0;
+    const opacity = opPrev + (opNow-opPrev)*ease;
+    const vPrev = prevFrame ? (prevFrame.values[name]||0) : 0;
+    const vNow = frame.values[name]||0;
+    const value = vPrev + (vNow-vPrev)*ease;
+    return {name, top, opacity, value};
+  });
+}
+
+async function downloadRaceVideo(){
+  ensureRaceReplayLoaded();
+  const R=_raceReplay;
+  if(!R || !R.frames.length) return;
+  if(!window.MediaRecorder || !document.createElement('canvas').captureStream){
+    alert(lang==='ar'
+      ? 'المتصفح لا يدعم تسجيل الفيديو مباشرة. استخدم تسجيل الشاشة بدلاً من ذلك.'
+      : 'This browser cannot record video directly. Please use screen recording instead.');
+    return;
+  }
+  ensureRaceColors(R);
+  const dlBtn=document.getElementById('race-replay-download');
+  const playBtn=document.getElementById('race-replay-play');
+  if(dlBtn) dlBtn.disabled=true;
+  if(playBtn) playBtn.disabled=true;
+
+  const layout = raceRowLayout(RACE_TOP_N);
+  const canvas = document.createElement('canvas');
+  canvas.width=layout.W; canvas.height=layout.H;
+  const ctx = canvas.getContext('2d');
+  const progressEl = document.createElement('div');
+  progressEl.id='race-video-progress';
+  progressEl.style.cssText='font-size:12px;color:#0047BB;font-weight:700;margin-top:6px';
+  const barsEl=document.getElementById('race-replay-bars');
+  barsEl.parentNode.insertBefore(progressEl, barsEl.nextSibling);
+
+  let mimeType = 'video/webm';
+  for(const t of ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm']){
+    if(MediaRecorder.isTypeSupported(t)){ mimeType=t; break; }
+  }
+  const stream = canvas.captureStream(30);
+  const chunks=[];
+  let recorder;
+  try {
+    recorder = new MediaRecorder(stream, {mimeType, videoBitsPerSecond:2500000});
+  } catch(e){
+    progressEl.textContent = (lang==='ar'?'تعذر بدء التسجيل: ':'Could not start recording: ')+e.message;
+    if(dlBtn) dlBtn.disabled=false; if(playBtn) playBtn.disabled=false;
+    return;
+  }
+  recorder.ondataavailable = e => { if(e.data && e.data.size>0) chunks.push(e.data); };
+  const done = new Promise(resolve=>{ recorder.onstop = resolve; });
+  recorder.start();
+
+  const total = R.frames.length;
+  for(let i=0;i<total;i++){
+    const frame = R.frames[i];
+    const prevFrame = i>0 ? R.frames[i-1] : null;
+    const dur = frame.duration || 1000;
+    const stepStart = performance.now();
+    await new Promise(resolve=>{
+      function tick(){
+        const elapsed = performance.now()-stepStart;
+        const t = Math.min(1, elapsed/dur);
+        const entries = raceFrameEntries(R, frame, prevFrame, t);
+        const order = entries.slice().sort((a,b)=>a.top-b.top);
+        const statusText = (frame.isNewStage?'🏁 '+frame.stageLabel+' — ':'') + frame.label;
+        drawRaceCanvasFrame(ctx, layout, R, order, frame.values, null, statusText);
+        progressEl.textContent = (lang==='ar'?'جارِ التسجيل...':'Recording...') + ' ' + Math.round((i+t)/total*100) + '%';
+        if(t<1) requestAnimationFrame(tick); else resolve();
+      }
+      tick();
+    });
+  }
+  // Hold the final frame so the result is readable in the recording
+  const lastFrame = R.frames[total-1];
+  const holdEntries = raceFrameEntries(R, lastFrame, null, 1);
+  const order = holdEntries.slice().sort((a,b)=>a.top-b.top);
+  drawRaceCanvasFrame(ctx, layout, R, order, lastFrame.values, null, '🏆 '+(lang==='ar'?'النتيجة النهائية':'Final result'));
+  await new Promise(r=>setTimeout(r,3000));
+
+  recorder.stop();
+  await done;
+  const blob = new Blob(chunks, {type:mimeType});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download='wc26_race_top10.webm'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 5000);
+
+  progressEl.textContent = (lang==='ar'?'✓ اكتمل التنزيل':'✓ Download complete');
+  setTimeout(()=>{ if(progressEl.parentNode) progressEl.parentNode.removeChild(progressEl); }, 4000);
+  if(dlBtn) dlBtn.disabled=false;
+  if(playBtn) playBtn.disabled=false;
 }
 
 // ===== Points race chart (admin preview) =====
@@ -2606,7 +2751,9 @@ function renderWrapCard(){
   const exNote = W.nums.exactBetter>=W.players-1 ? 'الأول في القروب' : ('أعلى من '+W.nums.exactBetter+' لاعبين');
   wrapTile(ctx,pad,1100,tw,th,'نتائج مطابقة','🎯 '+W.nums.exact,exNote);
   wrapTile(ctx,pad+tw+gap,1100,tw,th,'أفضل جولة',W.bestRound,'');
-  wrapTile(ctx,pad,1100+th+gap,tw,th,'ضربة معلم',W.bold&&!W.bold.fallback?W.bold.score:'—',W.bold&&!W.bold.fallback&&W.bold.others===0?'أنت الوحيد':'');
+  const boldLabel = (W.bold && !W.bold.fallback) ? (W.bold.label.length>26 ? W.bold.label.slice(0,25)+'…' : W.bold.label) : '';
+  const boldNote = boldLabel + (W.bold && !W.bold.fallback && W.bold.others===0 ? ' 🔮' : '');
+  wrapTile(ctx,pad,1100+th+gap,tw,th,'ضربة معلم',W.bold&&!W.bold.fallback?W.bold.score:'—',boldNote);
   const cFate=W.champ?(W.champ.type==='win'?'البطل 🏆':W.champ.type==='groups'?'خرج — المجموعات':W.champ.type==='ko'?('خرج — '+W.champ.round):W.champ.type==='final'?'خسر النهائي':''):'';
   wrapTile(ctx,pad+tw+gap,1100+th+gap,tw,th,'مرشح البطولة',W.champ?W.champ.team:'—',cFate);
   ctx.textAlign='center';
@@ -2912,11 +3059,10 @@ function renderMyResults(){
   });
 
   c.innerHTML = Object.values(byStage).sort((a,b)=>a.stage.order-b.stage.order).map(group=>{
-    const collapsible = group.stage.key==='groups';
+    // Default open: Semifinals, Third place, Final. Collapsed by default: Groups, R32, R16, QF.
+    const defaultOpen = ['SF','TP','F'].includes(group.stage.key);
     const secId = 'mr-sec-'+group.stage.key;
-    const header = collapsible
-      ? `<div class="group-label" style="margin-top:1.25rem;cursor:pointer" onclick="toggleMrStage('${secId}')">${ar?group.stage.labelAr:group.stage.label} <span id="${secId}-chev" style="font-size:11px;color:#939598;font-weight:400">▸ ${ar?'اضغط للعرض':'tap to show'} (${group.items.length})</span></div>`
-      : `<div class="group-label" style="margin-top:1.25rem">${ar?group.stage.labelAr:group.stage.label}</div>`;
+    const header = `<div class="group-label" style="margin-top:1.25rem;cursor:pointer" onclick="toggleMrStage('${secId}')">${ar?group.stage.labelAr:group.stage.label} <span id="${secId}-chev" style="font-size:11px;color:#939598;font-weight:400">${defaultOpen?'▾':'▸ '+(ar?'اضغط للعرض':'tap to show')+' ('+group.items.length+')'}</span></div>`;
     const cardsHtml = group.items.map(r=>{
       if(r.done){
         return `<div class="match-card mc-${r.sc.cls}">
@@ -2937,9 +3083,7 @@ function renderMyResults(){
         </div>`;
       }
     }).join('');
-    return header + (collapsible
-      ? `<div id="${secId}" style="display:none">${cardsHtml}</div>`
-      : cardsHtml);
+    return header + `<div id="${secId}" style="display:${defaultOpen?'block':'none'}">${cardsHtml}</div>`;
   }).join('');
 }
 
@@ -2949,7 +3093,10 @@ function toggleMrStage(secId){
   if(!el) return;
   const opening = el.style.display==='none';
   el.style.display = opening ? 'block' : 'none';
-  if(chev) chev.textContent = opening ? '▾' : ('▸ ' + (lang==='ar'?'اضغط للعرض':'tap to show'));
+  if(chev){
+    const n = el.children.length;
+    chev.textContent = opening ? '▾' : ('▸ ' + (lang==='ar'?'اضغط للعرض':'tap to show') + ' (' + n + ')');
+  }
 }
 
 function shareMyScore(){
@@ -3407,7 +3554,8 @@ function playerBreakdownHTML(pname, lbPrefix){
   const stagesHtml = Object.values(byStage).sort((a,b)=>a.stage.order-b.stage.order).map(group=>{
     const isGroups = group.stage.key==='groups';
     const sectionId = `${scopeId}-${group.stage.key}`;
-    const startOpen = !isGroups; // Groups collapsed by default, knockout stages open
+    // Default open: Semifinals, Third place, Final. Collapsed by default: Groups, R32, R16, QF.
+    const startOpen = ['SF','TP','F'].includes(group.stage.key);
 
     let innerHtml;
     if(isGroups){
