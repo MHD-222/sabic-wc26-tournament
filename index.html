@@ -2373,24 +2373,26 @@ function raceRowLayout(n){
   const W=900, rowH=48, top0=110;
   return {W, H: top0 + n*rowH + 40, rowH, top0};
 }
-function drawRaceCanvasFrame(ctx, layout, R, order, values, prevTop, statusText){
+function drawRaceCanvasFrame(ctx, layout, R, order, maxVal, statusText){
   const {W,H,rowH,top0} = layout;
   ctx.fillStyle='#FFFFFF'; ctx.fillRect(0,0,W,H);
-  ctx.textAlign='right'; ctx.direction='rtl';
+  ctx.direction='rtl'; ctx.textAlign='right';
   ctx.fillStyle='#041E42'; ctx.font='700 26px Segoe UI, Tahoma, Arial';
   ctx.fillText('SABIC SC · WC26 — سباق النقاط', W-30, 45);
   ctx.fillStyle='#0047BB'; ctx.font='600 18px Segoe UI, Tahoma, Arial';
   ctx.fillText(statusText||'', W-30, 78);
-  const maxVal = Math.max(...Object.values(values),1);
-  const barX0=170, barMaxW=W-barX0-110;
+  // Names anchored on the LEFT (fixed column); bars start just after the name
+  // column and grow rightward; the value label rides the bar's moving tip.
+  const nameColW=150, barX0=nameColW+20, barMaxW=W-barX0-90;
+  ctx.direction='ltr';
   order.forEach(entry=>{
     const {name, top, opacity, value} = entry;
     if(opacity<=0.02) return;
     const y = top0 + top*rowH;
     ctx.globalAlpha = opacity;
     ctx.fillStyle='#041E42'; ctx.font='700 18px Segoe UI, Tahoma, Arial';
-    ctx.textAlign='right';
-    ctx.fillText(name, W-30, y+rowH*0.62, 130);
+    ctx.textAlign='left';
+    ctx.fillText(name, 20, y+rowH*0.62, nameColW-20);
     const w = Math.max(4, value/maxVal*barMaxW);
     ctx.fillStyle=R.colorOf[name];
     wrapRoundRect(ctx, barX0, y+8, w, rowH-20, 6); ctx.fill();
@@ -2399,7 +2401,7 @@ function drawRaceCanvasFrame(ctx, layout, R, order, values, prevTop, statusText)
     ctx.fillText(String(Math.round(value)), barX0+w+10, y+rowH*0.62);
     ctx.globalAlpha=1;
   });
-  ctx.textAlign='right';
+  ctx.direction='rtl'; ctx.textAlign='right';
 }
 function raceFrameEntries(R, frame, prevFrame, t){
   // t in [0,1]: interpolation position between prevFrame and frame
@@ -2408,7 +2410,10 @@ function raceFrameEntries(R, frame, prevFrame, t){
   const prevOrder = prevFrame ? R.players.slice().sort((a,b)=>prevFrame.values[b]-prevFrame.values[a]||a.localeCompare(b)) : order;
   const prevTopSet = new Set(prevOrder.slice(0,RACE_TOP_N));
   const ease = t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2; // easeInOutQuad
-  return R.players.map(name=>{
+  const prevMax = Math.max(...Object.values(prevFrame ? prevFrame.values : frame.values),1);
+  const frameMax = Math.max(...Object.values(frame.values),1);
+  const maxVal = prevMax + (frameMax-prevMax)*ease; // scale itself animates too — no sudden snap
+  const entries = R.players.map(name=>{
     const rank = order.indexOf(name);
     const prevRank = prevOrder.indexOf(name);
     const inNow = topSet.has(name), inPrev = prevTopSet.has(name);
@@ -2422,6 +2427,7 @@ function raceFrameEntries(R, frame, prevFrame, t){
     const value = vPrev + (vNow-vPrev)*ease;
     return {name, top, opacity, value};
   });
+  return {entries, maxVal};
 }
 
 async function downloadRaceVideo(){
@@ -2441,14 +2447,27 @@ async function downloadRaceVideo(){
   if(playBtn) playBtn.disabled=true;
 
   const layout = raceRowLayout(RACE_TOP_N);
+  // The canvas is appended VISIBLY to the page during export. Some mobile
+  // browsers heavily throttle timers/animation for canvases that are never
+  // part of the rendered page, which previously caused the export to run
+  // far slower than intended. Keeping it on-screen also lets you watch the
+  // recording happen live.
   const canvas = document.createElement('canvas');
   canvas.width=layout.W; canvas.height=layout.H;
+  canvas.style.cssText='width:100%;max-width:'+layout.W+'px;border:1px solid #C6C8CA;border-radius:8px;margin-top:8px';
   const ctx = canvas.getContext('2d');
   const progressEl = document.createElement('div');
   progressEl.id='race-video-progress';
   progressEl.style.cssText='font-size:12px;color:#0047BB;font-weight:700;margin-top:6px';
+  const noteEl = document.createElement('div');
+  noteEl.style.cssText='font-size:11px;color:#939598;margin-top:2px';
+  noteEl.textContent = lang==='ar'
+    ? 'أبقِ هذا التبويب مفتوحاً وشاشة الجهاز مضاءة أثناء التسجيل'
+    : 'Keep this tab open and the screen on while recording';
   const barsEl=document.getElementById('race-replay-bars');
   barsEl.parentNode.insertBefore(progressEl, barsEl.nextSibling);
+  progressEl.parentNode.insertBefore(noteEl, progressEl.nextSibling);
+  noteEl.parentNode.insertBefore(canvas, noteEl.nextSibling);
 
   let mimeType = 'video/webm';
   for(const t of ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm']){
@@ -2468,32 +2487,32 @@ async function downloadRaceVideo(){
   const done = new Promise(resolve=>{ recorder.onstop = resolve; });
   recorder.start();
 
+  const sleep = ms => new Promise(r=>setTimeout(r, ms));
   const total = R.frames.length;
   for(let i=0;i<total;i++){
     const frame = R.frames[i];
     const prevFrame = i>0 ? R.frames[i-1] : null;
     const dur = frame.duration || 1000;
-    const stepStart = performance.now();
-    await new Promise(resolve=>{
-      function tick(){
-        const elapsed = performance.now()-stepStart;
-        const t = Math.min(1, elapsed/dur);
-        const entries = raceFrameEntries(R, frame, prevFrame, t);
-        const order = entries.slice().sort((a,b)=>a.top-b.top);
-        const statusText = (frame.isNewStage?'🏁 '+frame.stageLabel+' — ':'') + frame.label;
-        drawRaceCanvasFrame(ctx, layout, R, order, frame.values, null, statusText);
-        progressEl.textContent = (lang==='ar'?'جارِ التسجيل...':'Recording...') + ' ' + Math.round((i+t)/total*100) + '%';
-        if(t<1) requestAnimationFrame(tick); else resolve();
-      }
-      tick();
-    });
+    // Fixed number of substeps per match, each scheduled with setTimeout.
+    // This bounds worst-case time even if the browser throttles somewhat —
+    // unlike an open-ended requestAnimationFrame loop, it can't stall indefinitely.
+    const substeps = Math.max(6, Math.round(dur/40));
+    const statusText = (frame.isNewStage?'🏁 '+frame.stageLabel+' — ':'') + frame.label;
+    for(let s=1;s<=substeps;s++){
+      const t = s/substeps;
+      const {entries, maxVal} = raceFrameEntries(R, frame, prevFrame, t);
+      const order = entries.slice().sort((a,b)=>a.top-b.top);
+      drawRaceCanvasFrame(ctx, layout, R, order, maxVal, statusText);
+      progressEl.textContent = (lang==='ar'?'جارِ التسجيل...':'Recording...') + ' ' + Math.round((i+t)/total*100) + '%';
+      await sleep(dur/substeps);
+    }
   }
   // Hold the final frame so the result is readable in the recording
   const lastFrame = R.frames[total-1];
-  const holdEntries = raceFrameEntries(R, lastFrame, null, 1);
+  const {entries: holdEntries, maxVal: holdMax} = raceFrameEntries(R, lastFrame, null, 1);
   const order = holdEntries.slice().sort((a,b)=>a.top-b.top);
-  drawRaceCanvasFrame(ctx, layout, R, order, lastFrame.values, null, '🏆 '+(lang==='ar'?'النتيجة النهائية':'Final result'));
-  await new Promise(r=>setTimeout(r,3000));
+  drawRaceCanvasFrame(ctx, layout, R, order, holdMax, '🏆 '+(lang==='ar'?'النتيجة النهائية':'Final result'));
+  await sleep(3000);
 
   recorder.stop();
   await done;
@@ -2504,7 +2523,8 @@ async function downloadRaceVideo(){
   setTimeout(()=>URL.revokeObjectURL(url), 5000);
 
   progressEl.textContent = (lang==='ar'?'✓ اكتمل التنزيل':'✓ Download complete');
-  setTimeout(()=>{ if(progressEl.parentNode) progressEl.parentNode.removeChild(progressEl); }, 4000);
+  noteEl.remove();
+  setTimeout(()=>{ if(progressEl.parentNode) progressEl.parentNode.removeChild(progressEl); if(canvas.parentNode) canvas.parentNode.removeChild(canvas); }, 4000);
   if(dlBtn) dlBtn.disabled=false;
   if(playBtn) playBtn.disabled=false;
 }
