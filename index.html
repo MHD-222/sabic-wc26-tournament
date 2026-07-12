@@ -2201,7 +2201,7 @@ function computeWrapped(pname){
 }
 
 // ===== Race replay (admin preview): match-by-match bar race, decelerating pacing =====
-const RACE_STAGE_DURATION = { groups:90, R32:220, R16:350, QF:550, SF:900, TP:900, F:1800 };
+const RACE_STAGE_DURATION = { groups:300, R32:650, R16:1000, QF:1500, SF:2400, TP:2400, F:3500 };
 const RACE_STAGE_LABEL_AR = { groups:'دور المجموعات', R32:'دور الـ32', R16:'دور الـ16', QF:'ربع النهائي', SF:'نصف النهائي', TP:'المركز الثالث', F:'النهائي' };
 
 function computeRaceFrames(){
@@ -2254,6 +2254,8 @@ function raceColorOf(name, players){
   return RACE_COLORS[i>=0?i%RACE_COLORS.length:0];
 }
 
+const RACE_TOP_N = 10;
+
 function drawRaceFrame(i){
   const R=_raceReplay;
   if(!R || !R.frames.length) return;
@@ -2269,28 +2271,41 @@ function drawRaceFrame(i){
 
   const rowH=30, maxVal=Math.max(...Object.values(frame.values),1);
   const order = R.players.slice().sort((a,b)=>frame.values[b]-frame.values[a]||a.localeCompare(b));
+  const topSet = new Set(order.slice(0,RACE_TOP_N));
+  // Stable coloring keyed to FINAL standing so a player's bar color never changes mid-race
+  if(!R.colorOf){
+    const finalVals = R.frames[R.frames.length-1].values;
+    const finalOrder = R.players.slice().sort((a,b)=>finalVals[b]-finalVals[a]||a.localeCompare(b));
+    R.colorOf = {}; finalOrder.forEach((n,idx)=>{ R.colorOf[n]=RACE_COLORS[idx%RACE_COLORS.length]; });
+  }
 
   if(!barsEl.dataset.built){
-    barsEl.style.height = (rowH*R.players.length)+'px';
+    barsEl.style.height = (rowH*RACE_TOP_N)+'px';
+    barsEl.style.position='relative';
     barsEl.innerHTML = R.players.map(n=>{
-      const c = raceColorOf(n, order);
-      return `<div id="rr-row-${cssId(n)}" style="position:absolute;left:0;right:0;height:${rowH-4}px;top:0;transition:top .22s linear;display:flex;align-items:center;gap:6px;font-size:11px">
+      const c = R.colorOf[n];
+      return `<div id="rr-row-${cssId(n)}" style="position:absolute;left:0;right:0;height:${rowH-4}px;top:${rowH*RACE_TOP_N}px;opacity:0;transition:top .35s ease,opacity .35s ease;display:flex;align-items:center;gap:6px;font-size:11px">
         <span style="width:16px;text-align:right;color:#939598;font-weight:700" id="rr-rank-${cssId(n)}"></span>
         <span style="width:78px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:#041E42">${n}</span>
         <span style="flex:1;position:relative;height:14px">
-          <span id="rr-bar-${cssId(n)}" style="position:absolute;inset-inline-start:0;top:0;height:100%;border-radius:3px;background:${c};transition:width .22s linear;width:0%"></span>
+          <span id="rr-bar-${cssId(n)}" style="position:absolute;inset-inline-start:0;top:0;height:100%;border-radius:3px;background:${c};transition:width .3s linear;width:0%"></span>
         </span>
         <span id="rr-val-${cssId(n)}" style="width:34px;text-align:end;font-weight:700;color:#041E42">0</span>
       </div>`;
     }).join('');
     barsEl.dataset.built='1';
   }
-  order.forEach((n,rank)=>{
+  R.players.forEach(n=>{
     const row=document.getElementById('rr-row-'+cssId(n));
     const bar=document.getElementById('rr-bar-'+cssId(n));
     const val=document.getElementById('rr-val-'+cssId(n));
     const rk=document.getElementById('rr-rank-'+cssId(n));
-    if(row) row.style.top = (rank*rowH)+'px';
+    const rank = order.indexOf(n); // 0-based
+    const inTop = topSet.has(n);
+    if(row){
+      row.style.top = (inTop ? rank : RACE_TOP_N) * rowH + 'px';
+      row.style.opacity = inTop ? '1' : '0';
+    }
     if(bar) bar.style.width = Math.max(2,(frame.values[n]/maxVal*100))+'%';
     if(val) val.textContent = frame.values[n];
     if(rk) rk.textContent = (rank+1);
@@ -2313,7 +2328,7 @@ function stepRaceReplay(){
   }
   drawRaceFrame(R.idx+1);
   const dur = R.frames[R.idx].duration;
-  const extraHold = R.frames[R.idx].isFinal ? 2500 : 0;
+  const extraHold = R.frames[R.idx].isFinal ? 4000 : 0;
   R.timer = setTimeout(stepRaceReplay, dur + extraHold);
 }
 
