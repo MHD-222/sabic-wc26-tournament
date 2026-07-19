@@ -281,6 +281,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <button class="nav-btn" onclick="showTab('champion')" id="tab-btn-champion" data-en="Champion" data-ar="البطل">Champion</button>
       <button class="nav-btn" onclick="showTab('leaderboard')" id="tab-btn-leaderboard" data-en="Leaderboard" data-ar="الترتيب">Leaderboard</button>
       <button class="nav-btn" onclick="showTab('myresults')" id="tab-btn-myresults" data-en="My Results" data-ar="نتائجي">My Results</button>
+      <button class="nav-btn" onclick="showTab('twrapped')" id="tab-btn-twrapped" style="display:none" data-en="🏆 Wrapped" data-ar="🏆 الملخص">🏆 Wrapped</button>
       <button class="nav-btn" onclick="showTab('rules')" id="tab-btn-rules" data-en="Rules" data-ar="القواعد">Rules</button>
       <button class="nav-btn" onclick="showTab('admin')" id="tab-btn-admin" style="display:none" data-en="Admin" data-ar="الإدارة">Admin</button>
     </div>
@@ -335,6 +336,29 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
 
     <!-- ADMIN TAB -->
+    <div id="tab-twrapped" class="tab-content">
+      <div id="tw-hero"></div>
+      <div class="admin-block" style="margin-top:12px">
+        <h3>🏁 إعادة السباق</h3>
+        <p style="font-size:12px;color:#939598;margin-bottom:10px">سباق النقاط مباراة بمباراة — من أول صافرة إلى التتويج. شغّله وشاهد الترتيب يتغير</p>
+        <div id="race-replay-status" style="font-size:12px;color:#0047BB;font-weight:700;margin-bottom:6px;min-height:16px"></div>
+        <div id="race-replay-bars" style="position:relative;margin-bottom:10px"></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <button class="btn btn-sm" id="race-replay-play" style="width:auto;padding:6px 16px" onclick="toggleRaceReplay()">▶️ تشغيل</button>
+          <button class="btn btn-sm" id="race-replay-download" style="width:auto;padding:6px 16px;border-color:#0047BB;color:#0047BB;display:none" onclick="downloadRaceVideo()">⬇️ تحميل فيديو</button>
+          <button class="btn btn-sm" style="width:auto;padding:6px 16px;border-color:#939598;color:#939598" onclick="resetRaceReplay()">↺ إعادة</button>
+          <span id="race-replay-counter" style="font-size:11px;color:#939598;margin-inline-start:auto"></span>
+        </div>
+        <input type="range" id="race-replay-scrub" min="0" max="0" value="0" style="width:100%" oninput="scrubRaceReplay(this.value)">
+      </div>
+      <div class="admin-block">
+        <h3>📈 سباق النقاط</h3>
+        <p style="font-size:12px;color:#939598;margin-bottom:10px">النقاط التراكمية لكل لاعب عبر البطولة — اضغط على اسم لإظهار أو إخفاء خطه</p>
+        <div id="race-legend" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
+        <div id="race-chart"></div>
+      </div>
+    </div>
+
     <div id="tab-admin" class="tab-content">
       <p class="section-title">Admin panel</p>
       <p class="section-sub">Manage players and enter match results. Only visible to you.</p>
@@ -448,27 +472,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           <p style="font-size:12px;color:#939598;margin-bottom:10px">All results currently saved. Click Reset to remove a result and re-enter it.</p>
           <div id="results-list"></div>
         </div>
-      </div>
-
-      <div class="admin-block">
-        <h3>🏁 إعادة السباق — تجريبي (Race replay)</h3>
-        <p style="font-size:12px;color:#939598;margin-bottom:10px">Admin preview only — players cannot see this. Match-by-match rank race, slows down as the tournament progresses. Screen-record this to share.</p>
-        <div id="race-replay-status" style="font-size:12px;color:#0047BB;font-weight:700;margin-bottom:6px;min-height:16px"></div>
-        <div id="race-replay-bars" style="position:relative;margin-bottom:10px"></div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <button class="btn btn-sm" id="race-replay-play" style="width:auto;padding:6px 16px" onclick="toggleRaceReplay()">▶️ تشغيل</button>
-          <button class="btn btn-sm" id="race-replay-download" style="width:auto;padding:6px 16px;border-color:#0047BB;color:#0047BB" onclick="downloadRaceVideo()">⬇️ تحميل فيديو</button>
-          <button class="btn btn-sm" style="width:auto;padding:6px 16px;border-color:#939598;color:#939598" onclick="resetRaceReplay()">↺ إعادة</button>
-          <span id="race-replay-counter" style="font-size:11px;color:#939598;margin-inline-start:auto"></span>
-        </div>
-        <input type="range" id="race-replay-scrub" min="0" max="0" value="0" style="width:100%" oninput="scrubRaceReplay(this.value)">
-      </div>
-
-      <div class="admin-block">
-        <h3>📈 Points race — beta (سباق النقاط)</h3>
-        <p style="font-size:12px;color:#939598;margin-bottom:10px">Admin preview only — players cannot see this. Cumulative points per player over matches played. Tap a name to toggle their line.</p>
-        <div id="race-legend" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
-        <div id="race-chart"></div>
       </div>
 
       <div class="admin-block">
@@ -1156,8 +1159,19 @@ async function saveStateToSheet(opts) {
           // but preserve any predictions submitted by players in the meantime.
           const localPlayerPreds = state.predictions || {};
           const latestPreds = merged.predictions || {};
-          // Union latest + local predictions...
-          let mergedPreds = Object.assign({}, latestPreds, localPlayerPreds);
+          // Per-player, per-match union where the SHEET's copy wins (players may have
+          // saved fresh predictions since our last load). The admin's local copy wins
+          // only for entries the admin explicitly edited this session (_adminDirtyPreds),
+          // and local-only players (e.g. just renamed) are preserved by the union.
+          let mergedPreds = {};
+          new Set([...Object.keys(latestPreds), ...Object.keys(localPlayerPreds)]).forEach(n => {
+            const base = Object.assign({}, localPlayerPreds[n] || {}, latestPreds[n] || {});
+            const dirty = (typeof _adminDirtyPreds !== 'undefined') && _adminDirtyPreds[n];
+            if (dirty && localPlayerPreds[n]) dirty.forEach(mid => {
+              if (localPlayerPreds[n][mid] !== undefined) base[mid] = localPlayerPreds[n][mid];
+            });
+            mergedPreds[n] = base;
+          });
           // ...then reconcile against the authoritative (local) player list:
           // drop predictions/champion picks for players the admin has removed.
           const liveNames = new Set(Object.keys(state.players || {}));
@@ -1169,14 +1183,14 @@ async function saveStateToSheet(opts) {
           merged.pending = state.pending;
           merged.actual_champion = state.actual_champion;
           // Reconcile champion picks too
-          const mergedPicks = Object.assign({}, merged.champion_picks || {}, state.champion_picks || {});
+          const mergedPicks = Object.assign({}, state.champion_picks || {}, merged.champion_picks || {});
           Object.keys(mergedPicks).forEach(n => { if (!liveNames.has(n)) delete mergedPicks[n]; });
           merged.champion_picks = mergedPicks;
           // API-sourced data is admin-owned too
           merged.teamLogos = state.teamLogos || merged.teamLogos || {};
           merged.koOverrides = Object.assign({}, merged.koOverrides||{}, state.koOverrides||{});
           // Preserve all players' advance picks — admin saves must never wipe these
-          const mergedAdvance = Object.assign({}, merged.advance_picks||{}, state.advance_picks||{});
+          const mergedAdvance = Object.assign({}, state.advance_picks||{}, merged.advance_picks||{});
           Object.keys(mergedAdvance).forEach(n => { if (!liveNames.has(n)) delete mergedAdvance[n]; });
           merged.advance_picks = mergedAdvance;
           merged.standings = state.standings || merged.standings || {};
@@ -1268,6 +1282,7 @@ function doLogin(){
   document.getElementById('btn-logout').style.display='inline-block';
   document.getElementById('hdr-sub').textContent='👤 '+match.name+(currentUser.isAdmin?' (Admin)':'');
   if(currentUser.isAdmin) document.getElementById('tab-btn-admin').style.display='';
+  updateTWrappedTab();
   applyLangToMain();
   renderGroups();
   renderKnockout();
@@ -1443,7 +1458,35 @@ function showTab(tab){
   if(tab==='leaderboard') renderLeaderboard();
   if(tab==='rules') renderRules();
   if(tab==='myresults') renderMyResults();
+  if(tab==='twrapped') renderTournamentWrapped();
   if(tab==='admin') renderAdmin();
+}
+
+function updateTWrappedTab(){
+  const btn=document.getElementById('tab-btn-twrapped');
+  if(btn) btn.style.display = state.actual_champion ? '' : 'none';
+}
+
+function renderTournamentWrapped(){
+  if(!state.actual_champion) return;
+  const hero=document.getElementById('tw-hero');
+  if(hero){
+    const ch=state.actual_champion, f=flagFor(ch)||'';
+    const fr=state.results['KO_F_1'];
+    const score=fr?(fr.h+'–'+fr.a+(fr.pen?(lang==='ar'?' (ركلات ترجيح)':' (pens)'):'')):'';
+    const _picks=Object.values(state.champion_picks||{}).filter(Boolean).length;
+    const _correct=Object.values(state.champion_picks||{}).filter(t=>t===ch).length;
+    hero.innerHTML=`<div class="wrap-banner" style="cursor:default;padding:22px 16px">
+      <div style="font-size:13px;letter-spacing:2px;opacity:.8">WC26 · بطل العالم</div>
+      <div style="font-size:34px;margin:6px 0">${f} ${ch} 🏆</div>
+      ${score?`<div style="font-size:14px;font-weight:600">النهائي: ${score}</div>`:''}
+      ${(_picks>0&&_correct===0)?`<div style="font-size:12px;font-weight:600;margin-top:6px;opacity:.85">توقعات البطل الصحيحة بالقروب: ٠ من ${_picks} 📉</div>`:''}
+    </div>`;
+  }
+  const dl=document.getElementById('race-replay-download');
+  if(dl) dl.style.display = (currentUser&&currentUser.isAdmin)?'':'none';
+  renderRaceReplay();
+  renderPointsRace();
 }
 
 
@@ -2231,6 +2274,20 @@ function computeRaceFrames(){
       values: Object.assign({}, cum)
     });
   });
+  // Champion bonus appears as a final held frame — keeps race/video totals
+  // identical to the leaderboard and points chart once the champion is set.
+  if(state.actual_champion){
+    players.forEach(n=>{ if(state.champion_picks[n]===state.actual_champion) cum[n]+=10; });
+    frames.forEach(f=>{ f.isFinal=false; });
+    frames.push({
+      mid:'CHAMPION_BONUS',
+      label: lang==='ar' ? 'مكافأة توقع البطل +10 🏆' : 'Champion pick bonus +10 🏆',
+      stageKey:'F', stageLabel: RACE_STAGE_LABEL_AR['F'],
+      duration: RACE_STAGE_DURATION['F']||1000,
+      isNewStage:true, isFinal:true,
+      values: Object.assign({}, cum)
+    });
+  }
   return { players, frames };
 }
 
@@ -2676,7 +2733,13 @@ function buildWrappedSlides(W){
       :c.type==='ko'?`${f} ${c.team} طاح في ${c.round}${c.pens?' — بركلات الترجيح، طبعاً 💀':''}`
       :c.type==='groups'?`مرشحك ${f} ${c.team} ودّع من دور المجموعات. اختيار موفق 👍😅`
       :`${f} ${c.team} — لسه بالسباق`;
-    hb.push(`<div class="wrap-tile"><div class="wrap-sub" style="margin:0 0 4px">مصير مرشحك للبطولة</div><div class="wrap-mid">${line}</div></div>`);
+    const _picks=Object.values(state.champion_picks||{}).filter(Boolean).length;
+    const _correct=Object.values(state.champion_picks||{}).filter(t=>t===state.actual_champion).length;
+    const whiff=(state.actual_champion&&_picks>0&&_correct===0)
+      ?`<div class="wrap-mid" style="margin-top:10px;opacity:.92">${_picks} توقع بطل... ٠ صحيح. نسبة نجاح القروب: ٠٪ بالتمام والكمال — إنجاز يصعب تكراره حتى لو حاولتوا 📉</div>`:'';
+    hb.push(`<div class="wrap-tile"><div class="wrap-sub" style="margin:0 0 4px">مصير مرشحك للبطولة</div><div class="wrap-mid">${line}</div>${whiff}</div>`);
+  } else if(state.actual_champion){
+    hb.push(`<div class="wrap-tile"><div class="wrap-sub" style="margin:0 0 4px">مرشحك للبطولة</div><div class="wrap-mid">ما توقعت بطل أصلاً... وبالنظر للنتائج، طلعت أحكم واحد بالقروب 😌</div></div>`);
   }
   if(hb.length) S.push(`<div class="wrap-kicker">لحظة الانكسار 💔</div>`+hb.join(''));
   if(W.twin) S.push(`<div class="wrap-kicker">التوأم 👯</div>
@@ -2833,6 +2896,9 @@ function shareGroupWrapCard(){
   const lines=[];
   if(pair) lines.push(['توأما البطولة','\u200F'+pair.a+' و'+pair.b+' — تطابقوا '+pair.m+' مرة. واحد منهم ينسخ، بس منعرف منهو 🕵️']);
   if(ghost) lines.push(['المباراة الشبح','\u200F'+matchLabelFor(ghost.mid)+(ghost.n===0?': محد بالقروب جابها. ولا واحد. مباراة ضد العلم 👻':': '+ghost.n+' بس جابوها')]);
+  const gwPicks=Object.values(state.champion_picks||{}).filter(Boolean).length;
+  const gwCorrect=Object.values(state.champion_picks||{}).filter(t=>t===state.actual_champion).length;
+  if(state.actual_champion&&gwPicks>0&&gwCorrect===0) lines.push(['توقعات البطل','\u200F٠ صحيح من '+gwPicks+' — نسبة نجاح القروب: ٠٪ 📉']);
   if(ft) lines.push(['فريق القروب','\u200F'+ft[0]+' — توقعتوا فوزهم '+ft[1]+' مرة كقروب. الوفاء موجود، النتائج... حسب الحال']);
   if(fl) lines.push(['نتيجة القروب المفضلة','\u200F'+fl[0]+' — '+fl[1]+' توقع. فيه علاج جماعي؟ 💊']);
   let y=420;
@@ -2966,6 +3032,7 @@ function peUpdatePenRow(){
 
 function pePen(team){ pePenPick = team; peUpdatePenRow(); }
 
+let _adminDirtyPreds = {}; // player -> Set of mids the admin edited locally (protects them during merge)
 async function peSave(){
   const pname = document.getElementById('pe-player').value;
   const mid = document.getElementById('pe-match').value;
@@ -2978,8 +3045,11 @@ async function peSave(){
   const entry = { h, a };
   if(mid.startsWith('KO_') && h===a && pePenPick) entry.pen = pePenPick;
   state.predictions[pname][mid] = entry;
+  if(!_adminDirtyPreds[pname]) _adminDirtyPreds[pname] = new Set();
+  _adminDirtyPreds[pname].add(mid);
   // Merge-safe save: load latest, set just this player's match, save
   await saveStateToSheet({mergeScope:"admin"});
+  if(_adminDirtyPreds[pname]) _adminDirtyPreds[pname].delete(mid);
   renderLeaderboard();
   renderAdmin();
   msg.innerHTML = `<div class="alert alert-success">✓ Saved ${pname}: ${h}–${a}${entry.pen?' (pen '+entry.pen+')':''} for this match.</div>`;
@@ -3630,6 +3700,7 @@ function toggleLbDetail(prefix, i){
 }
 
 function renderLeaderboard(){
+  updateTWrappedTab();
   // Render into the public container if the public screen is showing, else the main one
   const onPublic = document.getElementById('screen-login') && document.getElementById('screen-login').style.display !== 'none';
   const container=document.getElementById(onPublic ? 'pub-lb-container' : 'lb-container') || document.getElementById('lb-container');
@@ -3836,8 +3907,6 @@ function toggleAdminSection(name){
 function renderAdmin(){
   if(!currentUser.isAdmin) return;
   renderAwaitingResults();
-  renderPointsRace();
-  renderRaceReplay();
 
   const tbody=document.getElementById('players-tbody');
   const players=Object.values(state.players);
