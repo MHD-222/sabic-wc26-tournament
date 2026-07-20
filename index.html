@@ -357,6 +357,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div id="race-legend" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
         <div id="race-chart"></div>
       </div>
+      <div class="admin-block">
+        <h3>📜 سجل البطولة</h3>
+        <div id="tw-records"></div>
+      </div>
+      <div class="admin-block">
+        <h3>📊 أرقام القروب</h3>
+        <div id="tw-participation"></div>
+      </div>
     </div>
 
     <div id="tab-admin" class="tab-content">
@@ -1286,7 +1294,7 @@ function doLogin(){
   applyLangToMain();
   renderGroups();
   renderKnockout();
-  showTab('knockout'); // Default to knockout tab on login
+  showTab(state.actual_champion ? 'twrapped' : 'knockout'); // Wrapped becomes the front page once the champion is crowned
   renderChampion();
   const seeded = seedGroupResults() + seedKoResults();
   // Only admin triggers a save when seeding results — regular players seed locally
@@ -1452,7 +1460,7 @@ function showTab(tab){
   document.getElementById('tab-'+tab).classList.add('active');
   document.getElementById('tab-btn-'+tab).classList.add('active');
   const saveBar = document.getElementById('save-bar');
-  saveBar.style.display = (tab==='leaderboard'||tab==='admin'||tab==='schedule'||tab==='standings') ? 'none' : 'block';
+  saveBar.style.display = (tab==='leaderboard'||tab==='admin'||tab==='schedule'||tab==='standings'||tab==='twrapped') ? 'none' : 'block';
   const saveTextMap = {groups:t('save_groups'), knockout:t('save_ko'), champion:t('save_champ')};
   if(saveTextMap[tab]) document.getElementById('btn-save-text').textContent = saveTextMap[tab];
   if(tab==='leaderboard') renderLeaderboard();
@@ -1476,17 +1484,52 @@ function renderTournamentWrapped(){
     const score=fr?(fr.h+'–'+fr.a+(fr.pen?(lang==='ar'?' (ركلات ترجيح)':' (pens)'):'')):'';
     const _picks=Object.values(state.champion_picks||{}).filter(Boolean).length;
     const _correct=Object.values(state.champion_picks||{}).filter(t=>t===ch).length;
+    // Player podium: totals from the race engine's final frame — verified identical
+    // to the leaderboard computation (incl. champion bonus), so they can't disagree.
+    let podium='';
+    try {
+      const {players, frames}=computeRaceFrames();
+      if(frames.length){
+        const fv=frames[frames.length-1].values;
+        const order=players.slice().sort((a,b)=>fv[b]-fv[a]||a.localeCompare(b));
+        const [g,s,b3]=order;
+        podium=`<div style="margin-top:14px">
+          <div style="font-size:24px;font-weight:800">🥇 ${g} — ${fv[g]} نقطة</div>
+          ${s?`<div style="font-size:15px;font-weight:600;margin-top:5px;opacity:.92">🥈 ${s} — ${fv[s]}</div>`:''}
+          ${b3?`<div style="font-size:15px;font-weight:600;margin-top:2px;opacity:.92">🥉 ${b3} — ${fv[b3]}</div>`:''}
+        </div>`;
+      }
+    } catch(e){}
     hero.innerHTML=`<div class="wrap-banner" style="cursor:default;padding:22px 16px">
       <div style="font-size:13px;letter-spacing:2px;opacity:.8">WC26 · بطل العالم</div>
       <div style="font-size:34px;margin:6px 0">${f} ${ch} 🏆</div>
       ${score?`<div style="font-size:14px;font-weight:600">النهائي: ${score}</div>`:''}
-      ${(_picks>0&&_correct===0)?`<div style="font-size:12px;font-weight:600;margin-top:6px;opacity:.85">توقعات البطل الصحيحة بالقروب: ٠ من ${_picks} 📉</div>`:''}
+      ${podium}
+      ${(_picks>0&&_correct===0)?`<div style="font-size:12px;font-weight:600;margin-top:10px;opacity:.85">توقعات البطل الصحيحة بالقروب: ٠ من ${_picks} 📉</div>`:''}
+    </div>
+    <div style="text-align:center;margin:12px 0">
+      <button class="btn" style="width:auto;padding:10px 26px" onclick="openWrapped()">🎁 شاهد ملخصك الشخصي</button>
     </div>`;
   }
   const dl=document.getElementById('race-replay-download');
   if(dl) dl.style.display = (currentUser&&currentUser.isAdmin)?'':'none';
   renderRaceReplay();
   renderPointsRace();
+  const G=computeGroupStats();
+  const rec=document.getElementById('tw-records');
+  if(rec) rec.innerHTML = G.lines.map(([label,text])=>
+    `<div style="border:1px solid #E6E7E8;border-radius:10px;padding:10px 12px;margin-bottom:8px">
+      <div style="font-size:12px;font-weight:800;color:#FFA300;margin-bottom:3px">${label}</div>
+      <div style="font-size:13px;color:#404D4D">${text}</div>
+    </div>`).join('');
+  const part=document.getElementById('tw-participation');
+  if(part) part.innerHTML = `
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      <div style="flex:1;min-width:100px;text-align:center;border:1px solid #E6E7E8;border-radius:10px;padding:10px"><div style="font-size:22px;font-weight:800;color:#0047BB">${G.playerCount}</div><div style="font-size:11px;color:#939598">لاعب</div></div>
+      <div style="flex:1;min-width:100px;text-align:center;border:1px solid #E6E7E8;border-radius:10px;padding:10px"><div style="font-size:22px;font-weight:800;color:#0047BB">${G.totalPreds}</div><div style="font-size:11px;color:#939598">توقع خلال البطولة</div></div>
+      <div style="flex:1;min-width:100px;text-align:center;border:1px solid #E6E7E8;border-radius:10px;padding:10px"><div style="font-size:22px;font-weight:800;color:#FFA300">${G.totalExacts}</div><div style="font-size:11px;color:#939598">نتيجة مطابقة جماعياً</div></div>
+      <div style="flex:1;min-width:100px;text-align:center;border:1px solid #E6E7E8;border-radius:10px;padding:10px"><div style="font-size:22px;font-weight:800;color:#0047BB">${G.scoredMatches}</div><div style="font-size:11px;color:#939598">مباراة محسوبة</div></div>
+    </div>`;
 }
 
 
@@ -2859,7 +2902,7 @@ async function shareWrapCard(){
 }
 
 // ===== Group Wrapped card (admin) =====
-function shareGroupWrapCard(){
+function computeGroupStats(){
   const players=wrapValidPlayers();
   const mids=wrapScoredMids();
   const P=state.predictions;
@@ -2878,8 +2921,11 @@ function shareGroupWrapCard(){
       const s=scoreOneMatch(mid,pr,state.results[mid]); if(s&&s.points>0) n++; });
     if(tot>0 && (!ghost||n<ghost.n||(n===ghost.n&&tot>ghost.tot))) ghost={mid,n,tot}; });
   const favTeam={}, favLine={};
+  let totalPreds=0, totalExacts=0;
   players.forEach(p=>Object.entries(P[p]||{}).forEach(([mid,pr])=>{
     if(!pr||pr.h===undefined||pr.h==='') return;
+    totalPreds++;
+    if(state.results[mid]){ const s=scoreOneMatch(mid,pr,state.results[mid]); if(s&&s.cls==='exact') totalExacts++; }
     favLine[pr.h+'–'+pr.a]=(favLine[pr.h+'–'+pr.a]||0)+1;
     const tm=matchTeamsFor(mid)||[];
     if(+pr.h>+pr.a&&tm[0]) favTeam[tm[0]]=(favTeam[tm[0]]||0)+1;
@@ -2887,20 +2933,25 @@ function shareGroupWrapCard(){
   }));
   const ft=Object.entries(favTeam).sort((a,b)=>b[1]-a[1])[0];
   const fl=Object.entries(favLine).sort((a,b)=>b[1]-a[1])[0];
+  const gwPicks=Object.values(state.champion_picks||{}).filter(Boolean).length;
+  const gwCorrect=Object.values(state.champion_picks||{}).filter(t=>t===state.actual_champion).length;
+  const lines=[];
+  if(pair) lines.push(['توأما البطولة','\u200F'+pair.a+' و'+pair.b+' — تطابقوا '+pair.m+' مرة. واحد منهم ينسخ، بس منعرف منهو 🕵️']);
+  if(ghost) lines.push(['المباراة الشبح','\u200F'+matchLabelFor(ghost.mid)+(ghost.n===0?': محد بالقروب جابها. ولا واحد. مباراة ضد العلم 👻':': '+ghost.n+' بس جابوها')]);
+  if(state.actual_champion&&gwPicks>0&&gwCorrect===0) lines.push(['توقعات البطل','\u200F٠ صحيح من '+gwPicks+' — نسبة نجاح القروب: ٠٪ 📉']);
+  if(ft) lines.push(['فريق القروب','\u200F'+ft[0]+' — توقعتوا فوزهم '+ft[1]+' مرة كقروب. الوفاء موجود، النتائج... حسب الحال']);
+  if(fl) lines.push(['نتيجة القروب المفضلة','\u200F'+fl[0]+' — '+fl[1]+' توقع. فيه علاج جماعي؟ 💊']);
+  return {lines, totalPreds, totalExacts, scoredMatches: mids.length, playerCount: players.length};
+}
+
+function shareGroupWrapCard(){
   const {cv,ctx}=wrapCanvasBase();
   ctx.textAlign='center'; ctx.direction='rtl';
   ctx.fillStyle='#8FB3E8'; ctx.font='700 34px Segoe UI, Tahoma, Arial';
   ctx.fillText('S A B I C  S C  ·  W C 2 6  W R A P P E D',540,120);
   ctx.fillStyle='#FFFFFF'; ctx.font='800 84px Segoe UI, Tahoma, Arial';
   ctx.fillText('ملخص القروب 🏆',540,260);
-  const lines=[];
-  if(pair) lines.push(['توأما البطولة','\u200F'+pair.a+' و'+pair.b+' — تطابقوا '+pair.m+' مرة. واحد منهم ينسخ، بس منعرف منهو 🕵️']);
-  if(ghost) lines.push(['المباراة الشبح','\u200F'+matchLabelFor(ghost.mid)+(ghost.n===0?': محد بالقروب جابها. ولا واحد. مباراة ضد العلم 👻':': '+ghost.n+' بس جابوها')]);
-  const gwPicks=Object.values(state.champion_picks||{}).filter(Boolean).length;
-  const gwCorrect=Object.values(state.champion_picks||{}).filter(t=>t===state.actual_champion).length;
-  if(state.actual_champion&&gwPicks>0&&gwCorrect===0) lines.push(['توقعات البطل','\u200F٠ صحيح من '+gwPicks+' — نسبة نجاح القروب: ٠٪ 📉']);
-  if(ft) lines.push(['فريق القروب','\u200F'+ft[0]+' — توقعتوا فوزهم '+ft[1]+' مرة كقروب. الوفاء موجود، النتائج... حسب الحال']);
-  if(fl) lines.push(['نتيجة القروب المفضلة','\u200F'+fl[0]+' — '+fl[1]+' توقع. فيه علاج جماعي؟ 💊']);
+  const lines = computeGroupStats().lines;
   let y=420;
   lines.forEach(([label,text])=>{
     ctx.fillStyle='rgba(255,255,255,.09)'; wrapRoundRect(ctx,70,y,940,230,22); ctx.fill();
